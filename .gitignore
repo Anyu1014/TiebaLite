@@ -1,0 +1,14 @@
+original-source/
+logs/
+releases/
+ios/build/
+ios/DerivedData/
+**/.DS_Store
+**/xcuserdata/
+**/.gradle/
+**/build/
+**/local.properties
+*.mobileprovision
+*.p12
+*.jks
+*.keystore
