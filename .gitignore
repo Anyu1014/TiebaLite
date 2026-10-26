@@ -1,7 +1,7 @@
 original-source/
 .build/
 logs/
-releases/
+/releases/
 ios/build/
 ios/DerivedData/
 **/.DS_Store
