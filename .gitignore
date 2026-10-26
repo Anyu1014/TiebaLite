@@ -1,4 +1,5 @@
 original-source/
+.build/
 logs/
 releases/
 ios/build/

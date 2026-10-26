@@ -224,6 +224,7 @@ final class TiebaURLTests: XCTestCase {
     func testExternalRouteBuildsImportURLOnlyForSupportedTiebaPages() throws {
         let threadURL = try XCTUnwrap(URL(string: "https://tieba.baidu.com/p/424242?pid=99"))
         let importedThreadURL = try XCTUnwrap(ExternalRoute.importURL(forWebURL: threadURL))
+        XCTAssertEqual(importedThreadURL.scheme, ExternalRoute.scheme)
         XCTAssertEqual(
             ExternalRoute.parse(importedThreadURL),
             .thread(id: 424242, postID: 99)

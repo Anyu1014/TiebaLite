@@ -153,7 +153,7 @@ struct MeView: View {
                     Button {
                         navigationPath.append(.about)
                     } label: {
-                        Label("关于 TiebaPure", systemImage: "info.circle")
+                        Label("关于 TiebaLite", systemImage: "info.circle")
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .contentShape(Rectangle())
                     }

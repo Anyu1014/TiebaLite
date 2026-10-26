@@ -142,7 +142,7 @@ struct ContentComposerPresentation: View {
                 ContentSubmissionRiskPolicy.acknowledge()
             }
         } message: {
-            Text("TiebaPure 通过非官方实验接口发帖和回复。使用时可能触发贴吧风控，导致内容被隐藏或删除、发帖或回帖等账号功能受限；极端情况下账号可能被冻结。若发送结果无法确认，应用不会自动重发，请先刷新页面核对。")
+            Text("TiebaLite 通过非官方实验接口发帖和回复。使用时可能触发贴吧风控，导致内容被隐藏或删除、发帖或回帖等账号功能受限；极端情况下账号可能被冻结。若发送结果无法确认，应用不会自动重发，请先刷新页面核对。")
         }
         .confirmationDialog(
             "删除损坏草稿？",

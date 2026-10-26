@@ -1,0 +1,83 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.compose'
+    id 'com.google.protobuf'
+}
+
+def appConfig = new groovy.json.JsonSlurper().parse(rootProject.file('../app-config.json'))
+
+android {
+    namespace 'dev.anyu.tiebapure'
+    compileSdk 36
+    defaultConfig {
+        applicationId appConfig.identifier
+        minSdk 26
+        targetSdk 36
+        versionCode appConfig.build as Integer
+        versionName appConfig.version
+        resValue 'string', 'app_name', appConfig.name
+        buildConfigField 'String', 'APP_SCHEME', groovy.json.JsonOutput.toJson(appConfig.urlScheme)
+        manifestPlaceholders = [appScheme: appConfig.urlScheme]
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+    }
+    buildFeatures { compose true; buildConfig true }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = '17' }
+    def signingStore = System.getenv('TIEBALITE_KEYSTORE')
+    def signingPasswordFile = System.getenv('TIEBALITE_KEY_PASSWORD_FILE')
+    if (signingStore && signingPasswordFile) {
+        signingConfigs {
+            localRelease {
+                storeFile file(signingStore)
+                storePassword new File(signingPasswordFile).text.trim()
+                keyAlias 'tiebalite'
+                keyPassword storePassword
+            }
+        }
+        buildTypes.release.signingConfig signingConfigs.localRelease
+    }
+    sourceSets {
+        main {
+            proto.srcDir '../../ios/Protos'
+            assets.srcDir 'src/main/assets'
+        }
+    }
+    packaging { resources.excludes += ['META-INF/INDEX.LIST', 'META-INF/DEPENDENCIES'] }
+}
+
+protobuf {
+    protoc { artifact = 'com.google.protobuf:protoc:3.25.5' }
+    generateProtoTasks { all().configureEach { builtins { java {} } } }
+}
+
+dependencies {
+    implementation platform('androidx.compose:compose-bom:2025.09.01')
+    implementation 'androidx.activity:activity-compose:1.11.0'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.material:material-icons-core'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.9.4'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2'
+    implementation 'com.google.protobuf:protobuf-java:3.25.5'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    implementation 'io.coil-kt:coil-compose:2.7.0'
+    implementation 'androidx.media3:media3-exoplayer:1.8.0'
+    implementation 'androidx.media3:media3-ui:1.8.0'
+    implementation 'androidx.media3:media3-datasource-okhttp:1.8.0'
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20250517'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+}
+
+tasks.withType(Test).configureEach {
+    ['http.proxyHost', 'http.proxyPort', 'https.proxyHost', 'https.proxyPort'].each { key ->
+        def value = System.getProperty(key)
+        if (value != null) systemProperty key, value
+    }
+}

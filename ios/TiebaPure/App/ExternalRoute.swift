@@ -3,6 +3,7 @@ import Foundation
 /// Destination parsed from an externally supplied link: the custom
 /// tiebapure:// scheme or a validated tieba.baidu.com HTTPS URL.
 enum ExternalRoute: Equatable, Identifiable {
+    static let scheme = Bundle.main.object(forInfoDictionaryKey: "TiebaPureURLScheme") as? String ?? "tiebapure"
     private static let maximumForumNameCharacters = 100
 
     case thread(id: Int64, postID: UInt64?)
@@ -28,7 +29,7 @@ enum ExternalRoute: Equatable, Identifiable {
             return nil
         }
         switch components.scheme?.lowercased() {
-        case "tiebapure":
+        case scheme, "tiebapure":
             return parseCustomScheme(components)
         case "https":
             return parseWebURL(components)
@@ -45,7 +46,7 @@ enum ExternalRoute: Equatable, Identifiable {
             return nil
         }
         var components = URLComponents()
-        components.scheme = "tiebapure"
+        components.scheme = scheme
         components.host = "open"
         components.queryItems = [URLQueryItem(name: "url", value: url.absoluteString)]
         return components.url

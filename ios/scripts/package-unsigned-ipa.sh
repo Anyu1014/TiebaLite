@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
+source /Users/y/toolchains/env.sh
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_DIR="$ROOT/build"
 PACKAGE_ROOT="$BUILD_DIR/unsigned-ipa"
-DERIVED_DATA="${TIEBAPURE_DERIVED_DATA:-/private/tmp/TiebaPurePackageDerivedData}"
+DERIVED_DATA="${TIEBAPURE_DERIVED_DATA:-$ROOT/../.build/ios}"
 ARCHIVE_PATH="$PACKAGE_ROOT/TiebaPure.xcarchive"
 PAYLOAD_DIR="$PACKAGE_ROOT/Payload"
 APP_NAME="TiebaPure.app"
@@ -26,15 +27,17 @@ elif ! command -v xcodegen >/dev/null 2>&1; then
   echo "Install xcodegen, or set TIEBAPURE_SKIP_XCODEGEN_CHECK=1 to bypass this release gate." >&2
   exit 1
 else
-  XCODEGEN_CHECK_DIR="$(mktemp -d "${TMPDIR:-/private/tmp}/TiebaPureXcodeGen.XXXXXX")"
+  mkdir -p "$ROOT/../.build"
+  XCODEGEN_CHECK_DIR="$(mktemp -d "$ROOT/../.build/project-check.XXXXXX")"
   cp "$ROOT/project.yml" "$XCODEGEN_CHECK_DIR/project.yml"
+  ln -s "$ROOT/App.xcconfig" "$XCODEGEN_CHECK_DIR/App.xcconfig"
   ln -s "$ROOT/TiebaPure" "$XCODEGEN_CHECK_DIR/TiebaPure"
   ln -s "$ROOT/TiebaPureOpenIn" "$XCODEGEN_CHECK_DIR/TiebaPureOpenIn"
   ln -s "$ROOT/TiebaPureTests" "$XCODEGEN_CHECK_DIR/TiebaPureTests"
   ln -s "$ROOT/TiebaPureUITests" "$XCODEGEN_CHECK_DIR/TiebaPureUITests"
   ln -s "$ROOT/LICENSE" "$XCODEGEN_CHECK_DIR/LICENSE"
   ln -s "$ROOT/LICENSES" "$XCODEGEN_CHECK_DIR/LICENSES"
-  xcodegen generate \
+  /Users/y/toolchains/bin/xcodegen generate \
     --spec "$XCODEGEN_CHECK_DIR/project.yml" \
     --project "$XCODEGEN_CHECK_DIR" \
     --project-root "$XCODEGEN_CHECK_DIR" \
@@ -58,7 +61,7 @@ mkdir -p "$PACKAGE_ROOT"
 rm -rf "$ARCHIVE_PATH" "$PAYLOAD_DIR" "$OUTPUT"
 mkdir -p "$PAYLOAD_DIR"
 
-xcodebuild \
+/Users/y/toolchains/bin/xcodebuild \
   -quiet \
   -project "$ROOT/TiebaPure.xcodeproj" \
   -scheme TiebaPure \

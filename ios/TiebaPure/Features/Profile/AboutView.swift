@@ -10,7 +10,8 @@ struct AboutView: View {
 
     var body: some View {
         Form {
-            Section("TiebaPure") {
+            Section(Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "TiebaPure") {
+                Text("基于 TiebaPure-iOS 的独立二次开发版本，保留原项目作者和开源许可。")
                 LabeledContent("版本", value: versionText)
                 LabeledContent("项目作者") {
                     Link("infinityf4p", destination: authorURL)
@@ -46,7 +47,7 @@ struct AboutView: View {
                 }
             }
         }
-        .navigationTitle("关于 TiebaPure")
+        .navigationTitle("关于 TiebaLite")
         .navigationBarTitleDisplayMode(.inline)
         .fullScreenInteractiveNavigationPop()
     }
