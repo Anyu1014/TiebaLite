@@ -3,6 +3,7 @@ package dev.anyu.tiebapure
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -12,8 +13,13 @@ import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -24,6 +30,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -86,13 +94,22 @@ class MainActivity : ComponentActivity() {
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         coil.Coil.setImageLoader(ImageLoader.Builder(this).okHttpClient(mediaClient).build())
         handleIntent(intent)
         setContent {
             val vm = model
             val dark = when (vm.darkMode) { "dark" -> true; "light" -> false; else -> isSystemInDarkTheme() }
-            MaterialTheme(colorScheme = if (dark) darkColorScheme(primary = Color(0xff90b9ff), secondary = Color(0xff90b9ff), secondaryContainer = Color(0xff163565)) else lightColorScheme(primary = Color(0xff1769db), secondary = Color(0xff1769db), secondaryContainer = Color(0xffe2edff), surface = Color.White, surfaceContainer = Color.White, background = Color(0xfff5f6f8))) {
+            SideEffect {
+                androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = !dark
+                    isAppearanceLightNavigationBars = !dark
+                }
+            }
+            MaterialTheme(colorScheme = if (dark) darkColorScheme(primary = Color(0xff0a84ff), secondary = Color(0xff0a84ff), secondaryContainer = Color(0xff163565), background = Color.Black, surface = Color(0xff1c1c1e), surfaceContainer = Color(0xff1c1c1e), onSurface = Color.White, onSurfaceVariant = Color(0xff8e8e93)) else lightColorScheme(primary = IOSLayout.blue, secondary = IOSLayout.blue, secondaryContainer = Color(0xffe2edff), surface = Color.White, surfaceContainer = Color.White, background = IOSLayout.background, onSurface = Color.Black, onSurfaceVariant = Color(0xff8e8e93))) {
+                CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
                 AppScreen(vm, { export.launch("TiebaLite-backup.json") }, { restore.launch(arrayOf("application/json", "application/octet-stream")) })
+                }
             }
         }
     }
@@ -153,32 +170,79 @@ class MainActivity : ComponentActivity() {
             (readingFilter == 0 || readingFilter == 1 && t.id !in readIds || readingFilter == 2 && t.id in readIds)
     }
     val context = LocalContext.current
+    val searchFocus = remember { FocusRequester() }
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    LaunchedEffect(r.kind) { if (r.kind == "searchinput") searchFocus.requestFocus() }
     LaunchedEffect(vm.notice) { if (vm.notice.isNotBlank()) { snackbar.showSnackbar(vm.notice); vm.clearNotice() } }
     BackHandler(enabled = r.kind !in setOf("home", "forums", "me")) { vm.back() }
     val title = when (r.kind) {
-        "home" -> context.getString(dev.anyu.tiebapure.R.string.app_name)
+        "home" -> "首页"
         "forums" -> "进吧"
         "me" -> "我的"
         "forum" -> "${r.id}吧"
         "thread", "offline" -> vm.data.thread?.thread?.title ?: "帖子详情"
-        "search" -> "搜索：${r.id}"
+        "search", "searchinput" -> if (r.extra.isBlank()) "搜索" else "搜索本吧"
         "subposts" -> "楼中楼"
         "history" -> "浏览历史"
         "saved" -> "本地保存"
         "favorites" -> "账号收藏"
         "messages" -> if (r.extra == "at") "@我的" else "回复我的"
         "settings" -> "设置"
+        "readingSettings" -> "阅读设置"
         "block" -> "屏蔽管理"
         "about" -> "关于 TiebaLite"
         "login" -> "登录百度账号"
         else -> r.title
     }
-    Scaffold(snackbarHost = { SnackbarHost(snackbar) }, topBar = {
-        TopAppBar(title = { Text(title, maxLines = 1) }, navigationIcon = {
-            if (r.kind !in setOf("home", "forums", "me")) IconButton(onClick = { vm.back() }) { Icon(Icons.Default.ArrowBack, "返回") }
-        }, actions = {
-            if (r.kind !in setOf("login", "settings", "about", "me", "block")) IconButton(onClick = { vm.load() }) { Icon(Icons.Default.Refresh, "刷新") }
+    var activeRoot by remember { mutableStateOf("home") }
+    LaunchedEffect(r.kind) { if (r.kind in setOf("home", "forums", "me")) activeRoot = r.kind }
+    val homeFeedState = rememberLazyListState()
+    val otherFeedState = key(r) { rememberLazyListState() }
+    val feedState = if (r.kind == "home") homeFeedState else otherFeedState
+    val scope = rememberCoroutineScope()
+    var isCollected by remember(r.id, vm.data.thread?.thread?.collected) { mutableStateOf(vm.data.thread?.thread?.collected == true) }
+    val openSearch: () -> Unit = {
+        query = ""
+        vm.navigate(Route("searchinput", title = if (r.kind == "thread") "搜索本吧" else "搜索", extra = if (r.kind == "thread") vm.data.thread?.thread?.forum.orEmpty() else if (r.kind == "forum") r.id else ""))
+    }
+    FrostedAppShell(
+        title = title, root = activeRoot,
+        showTabs = r.kind !in setOf("thread", "subposts", "offline", "login", "compose"),
+        showBack = r.kind !in setOf("home", "forums", "me"),
+        showSearch = r.kind in setOf("home", "forum"),
+        titleContent = if (r.kind == "thread") { {
+            Row(Modifier.clip(androidx.compose.foundation.shape.CircleShape).background(MaterialTheme.colorScheme.surface.copy(alpha = 0.45f)).clickable { vm.data.thread?.thread?.forum?.takeIf(String::isNotBlank)?.let { vm.navigate(Route("forum", it)) } }.padding(horizontal = 8.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                IOSAvatar(vm.data.thread?.thread?.forum.orEmpty(), vm.data.thread?.thread?.forumAvatar.orEmpty(), diameter = 22.dp)
+                Spacer(Modifier.width(8.dp))
+                Text(vm.data.thread?.thread?.forum?.let { if (it.endsWith("吧")) it else it + "吧" } ?: "帖子", fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1, modifier = Modifier.weight(1f, fill = false), overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                Icon(Icons.Default.KeyboardArrowRight, null, modifier = Modifier.size(14.dp))
+            }
+        } } else null,
+        onBack = { vm.back() },
+        onSearch = openSearch,
+        onTab = { kind ->
+            if (kind == "home" && r.kind == "home") { scope.launch { feedState.animateScrollToItem(0) }; vm.load(1) }
+            else vm.navigate(Route(kind), root = true)
+        },
+        snackbar = { SnackbarHost(snackbar) },
+        feedback = {
+            if (vm.loading && r.kind != "home") LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (vm.saving) Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) { Text(vm.saveProgress.ifBlank { "正在准备本地保存…" }, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall); TextButton(onClick = vm::cancelSave) { Text("取消") } }
+            if (vm.error.isNotBlank() && r.kind != "home") Surface(color = MaterialTheme.colorScheme.errorContainer) {
+                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(vm.error, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer)
+                    TextButton(onClick = vm::retryLoad) { Text("重试") }
+                }
+            }
+        },
+        actions = {
+            if (r.kind !in setOf("home", "forums", "thread", "searchinput", "search", "login", "settings", "about", "me", "block")) IconButton(onClick = { vm.load(1) }) { Icon(Icons.Default.Refresh, "刷新") }
             if (r.kind == "thread") {
+                IconButton(onClick = {
+                    val desired = !isCollected
+                    vm.action(onSuccess = { isCollected = desired }) { a -> vm.api.favorite(a, r.id, vm.data.posts.firstOrNull()?.id ?: "0", desired); if (desired) "收藏成功" else "已取消收藏" }
+                }) { IOSCollectionStar(isCollected) }
+                IconButton(onClick = openSearch) { Icon(Icons.Default.Search, "搜索本吧", modifier = Modifier.size(22.dp)) }
                 IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "帖子操作") }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(text = { Text("保存整帖正文和楼中楼") }, onClick = { menu = false; vm.saveThread(0) })
@@ -190,72 +254,31 @@ class MainActivity : ComponentActivity() {
                     if (vm.account != null && vm.data.thread?.posts?.any { it.floor == 1 && it.author.id == vm.account?.uid } == true) DropdownMenuItem(text = { Text("删除本人主题") }, onClick = { menu = false; confirmDelete = true })
                 }
             }
-        })
-    }, bottomBar = {
-        if (r.kind in setOf("home", "forums", "me")) NavigationBar {
-            listOf(Triple("home", "首页", Icons.Default.Home), Triple("forums", "进吧", Icons.Default.List), Triple("me", "我的", Icons.Default.Person)).forEach { (kind, label, icon) ->
-                NavigationBarItem(selected = r.kind == kind, onClick = { if (r.kind == kind) vm.load() else vm.navigate(Route(kind), root = true) }, icon = { Icon(icon, label) }, label = { Text(label) })
-            }
         }
-    }) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            if (vm.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-            if (vm.saving) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) { Text(vm.saveProgress.ifBlank { "正在准备本地保存…" }, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall); TextButton(onClick = vm::cancelSave) { Text("取消") } }
-            if (vm.error.isNotBlank()) Surface(color = MaterialTheme.colorScheme.errorContainer) {
-                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(vm.error, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer)
-                    TextButton(onClick = { vm.load() }) { Text("重试") }
-                }
-            }
+    ) { padding ->
+        Column(Modifier.fillMaxSize().padding(top = if (r.kind in setOf("home", "forums", "me", "thread", "subposts", "offline", "settings", "readingSettings")) 0.dp else padding.calculateTopPadding())) {
             when (r.kind) {
                 "login" -> LoginView(vm) { vm.navigate(Route("me"), root = true) }
-                "profile" -> ProfileScreen(vm)
-                "editprofile" -> EditProfileScreen(vm)
-                "following", "followers" -> RelationshipScreen(vm)
+                "profile" -> ProfileScreen(vm, padding)
+                "editprofile" -> EditProfileScreen(vm, padding)
+                "following", "followers" -> RelationshipScreen(vm, padding)
                 "compose" -> ComposerScreen(vm)
-                "me" -> LazyColumn {
-                    item { Text(vm.account?.name ?: "访客", Modifier.padding(20.dp), style = MaterialTheme.typography.headlineSmall) }
-                    item { MenuRow(if (vm.account == null) "登录百度账号" else "退出登录") { if (vm.account == null) vm.navigate(Route("login")) else confirmLogout = true } }
-                    if (vm.account != null) item { MenuRow("我的个人资料") { vm.navigate(Route("profile", vm.account!!.uid, vm.account!!.name)) } }
-                    item { MenuRow("回复我的") { vm.navigate(Route("messages")) } }
-                    item { MenuRow("@我的") { vm.navigate(Route("messages", extra = "at")) } }
-                    item { MenuRow("账号收藏") { vm.navigate(Route("favorites")) } }
-                    item { MenuRow("浏览历史") { vm.navigate(Route("history")) } }
-                    item { MenuRow("本地保存") { vm.navigate(Route("saved")) } }
-                    item { MenuRow("本机草稿") { vm.navigate(Route("drafts", title = "本机草稿")) } }
-                    item { MenuRow("屏蔽管理") { vm.navigate(Route("block")) } }
-                    item { MenuRow("设置") { vm.navigate(Route("settings")) } }
-                    item { MenuRow("关于与开源许可") { vm.navigate(Route("about")) } }
-                }
-                "settings" -> Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
-                    Text("外观", style = MaterialTheme.typography.titleMedium)
-                    Row { listOf("system" to "跟随系统", "light" to "浅色", "dark" to "深色").forEach { (value, label) -> FilterChip(selected = vm.darkMode == value, onClick = { vm.setSettings(theme = value) }, label = { Text(label) }, modifier = Modifier.padding(end = 8.dp)) } }
-                    Text("正文字号 ${vm.fontSize.toInt()}", Modifier.padding(top = 16.dp))
-                    Slider(value = vm.fontSize, onValueChange = { vm.setSettings(size = it) }, valueRange = 12f..26f, steps = 13)
-                    Row(verticalAlignment = Alignment.CenterVertically) { Text("手动加载媒体", Modifier.weight(1f)); Switch(checked = vm.manualMedia, onCheckedChange = { vm.setSettings(media = it) }) }
-                    var autoSign by remember { mutableStateOf(vm.store.prefs.getBoolean("auto-sign", false)) }
-                    Row(verticalAlignment = Alignment.CenterVertically) { Text("每天首次打开时签到", Modifier.weight(1f)); Switch(checked = autoSign, onCheckedChange = { autoSign = it; vm.store.prefs.edit().putBoolean("auto-sign", it).apply() }) }
-                    OutlinedButton(onClick = { (context as? MainActivity)?.chooseFont() }, modifier = Modifier.fillMaxWidth()) { Text("导入本机 TTF/OTF 阅读字体") }
-                    TextButton(onClick = { vm.fontStore.select(""); vm.refreshFonts() }) { Text("使用系统阅读字体") }
-                    vm.fonts.forEach { font -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { vm.fontStore.select(font.file); vm.refreshFonts() }, modifier = Modifier.weight(1f)) { Text(font.name) }
-                        IconButton(onClick = { vm.fontStore.remove(font); vm.refreshFonts() }) { Icon(Icons.Default.Delete, "移除字体") }
-                    } }
-                    Text("备份包含历史、阅读页码、本地正文与屏蔽；不包含账号凭据、草稿和离线媒体。", style = MaterialTheme.typography.bodySmall)
-                    Button(onClick = export, Modifier.fillMaxWidth().padding(top = 16.dp)) { Text("导出本地备份") }
-                    OutlinedButton(onClick = restore, Modifier.fillMaxWidth()) { Text("合并导入本地备份") }
-                }
-                "about" -> AboutScreen()
+                "me" -> IOSMeScreen(vm, padding) { if (vm.account == null) vm.navigate(Route("login")) else confirmLogout = true }
+                "forums" -> IOSForumHubScreen(vm, padding)
+                "settings" -> IOSSettingsScreen(vm, padding) { confirmLogout = true }
+                "readingSettings" -> IOSReadingSettingsScreen(vm, padding, export, restore)
+                "about" -> AboutScreen(vm, padding)
+                "license" -> LicenseScreen(r.id, padding)
                 "block" -> {
                     Button(onClick = { blockDialog = true }, Modifier.padding(16.dp)) { Text("添加屏蔽") }
                     var revision by remember { mutableIntStateOf(0) }
                     val blocks = remember(revision, blockDialog) { vm.store.list("block") }
-                    LazyColumn { items(blocks, key = { it.first }) { (id, j) -> Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Text("${j.optString("type")}：${j.optString("value")}", Modifier.weight(1f)); IconButton(onClick = { vm.store.remove("block", id); revision++ }) { Icon(Icons.Default.Delete, "删除屏蔽") } } } }
+                    LazyColumn(contentPadding = PaddingValues(bottom = padding.calculateBottomPadding())) { items(blocks, key = { it.first }) { (id, j) -> Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Text("${j.optString("type")}：${j.optString("value")}", Modifier.weight(1f)); IconButton(onClick = { vm.store.remove("block", id); revision++ }) { Icon(Icons.Default.Delete, "删除屏蔽") } } } }
                 }
                 "drafts" -> {
                     var revision by remember { mutableIntStateOf(0) }
                     val rows = remember(vm.account?.uid, revision) { vm.store.list("draft").filter { it.second.optString("account") == vm.account?.uid && it.second.has("target") } }
-                    LazyColumn {
+                    LazyColumn(contentPadding = PaddingValues(bottom = padding.calculateBottomPadding())) {
                         if (rows.isEmpty()) item { EmptyMessage("当前账号没有本机草稿") }
                         items(rows, key = { it.first }) { (id, j) -> Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(j.optString("title").ifBlank { j.optString("text").take(60) }, Modifier.weight(1f).clickable { vm.navigate(Route("compose", j.getString("forum"), "编辑草稿", j.getString("target"))) })
@@ -267,8 +290,8 @@ class MainActivity : ComponentActivity() {
                     if (maxWidth >= 840.dp && vm.contextThreads.isNotEmpty()) Row(Modifier.fillMaxSize()) {
                         LazyColumn(Modifier.weight(0.38f).fillMaxHeight()) { items(vm.contextThreads, key = { it.id + ":" + it.matchedPost }) { t -> ThreadRow(t, vm.fontSize, !vm.manualMedia) { vm.navigate(Route("thread", t.id, t.title, t.matchedPost)) } } }
                         VerticalDivider()
-                        Box(Modifier.weight(0.62f)) { PostScreen(vm) }
-                    } else PostScreen(vm)
+                        Box(Modifier.weight(0.62f)) { PostScreen(vm, padding) }
+                    } else PostScreen(vm, padding)
                 }
                 else -> {
                     if (isLibrary) {
@@ -283,40 +306,61 @@ class MainActivity : ComponentActivity() {
                             TextButton(onClick = { confirmBatch = true }, enabled = selected.isNotEmpty()) { Text(if (r.kind == "favorites") "取消收藏" else "删除") }
                         }
                     }
-                    if (r.kind in setOf("home", "forums", "forum", "search")) {
-                        Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedTextField(value = query, onValueChange = { if (it.length <= 500) query = it else vm.report("关键词最多 500 字") }, modifier = Modifier.weight(1f), singleLine = true, placeholder = { Text(if (r.kind == "forums") "输入吧名" else "搜索贴吧内容") })
-                            TextButton(onClick = { if (query.isNotBlank()) vm.navigate(if (r.kind == "forums") Route("forum", query.trim().removeSuffix("吧")) else Route("search", query.trim(), extra = if (r.kind == "forum") r.id else "")) }) { Text(if (r.kind == "forums") "进吧" else "搜索") }
+                    if (r.kind in setOf("search", "searchinput")) {
+                        val submitSearch: () -> Unit = {
+                            if (query.isNotBlank()) { keyboard?.hide(); vm.navigate(Route("search", query.trim(), extra = r.extra)) }
+                        }
+                        Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().background(MaterialTheme.colorScheme.surface, androidx.compose.foundation.shape.RoundedCornerShape(8.dp)).padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(17.dp)); Spacer(Modifier.width(8.dp))
+                            BasicTextField(query, { if (it.length <= 500) query = it else vm.report("关键词最多 500 字") }, Modifier.weight(1f).focusRequester(searchFocus).heightIn(min = 44.dp).padding(vertical = 11.dp), singleLine = true, textStyle = androidx.compose.ui.text.TextStyle(fontSize = 17.sp, color = MaterialTheme.colorScheme.onSurface), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search, autoCorrectEnabled = false), keyboardActions = KeyboardActions(onSearch = { submitSearch() }), decorationBox = { inner -> Box { if (query.isEmpty()) Text("搜索贴吧内容", fontSize = 17.sp, color = MaterialTheme.colorScheme.onSurfaceVariant); inner() } })
+                            if (query.isNotEmpty()) IconButton(onClick = { query = ""; if (r.kind == "search") vm.navigate(Route("searchinput", extra = r.extra)) }, modifier = Modifier.size(44.dp)) { Icon(Icons.Default.Clear, "清空搜索内容", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(17.dp)) }
+                            else Spacer(Modifier.width(16.dp))
                         }
                     }
+                    if (r.kind == "messages") Row(Modifier.padding(horizontal = 12.dp)) {
+                        TextButton(onClick = { vm.navigate(Route("messages")) }) { Text("回复我的") }
+                        TextButton(onClick = { vm.navigate(Route("messages", extra = "at")) }) { Text("@我的") }
+                    }
                     if (r.kind == "forum") Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
-                        FilterChip(selected = vm.sort == 0 && r.extra != "good", onClick = { vm.sort = 0; vm.load() }, label = { Text("最新回复") })
-                        FilterChip(selected = vm.sort == 1, onClick = { vm.sort = 1; vm.load() }, label = { Text("最新发布") }, modifier = Modifier.padding(start = 8.dp))
+                        FilterChip(selected = vm.sort == 0 && r.extra != "good", onClick = { vm.sort = 0; vm.load(1) }, label = { Text("最新回复") })
+                        FilterChip(selected = vm.sort == 1, onClick = { vm.sort = 1; vm.load(1) }, label = { Text("最新发布") }, modifier = Modifier.padding(start = 8.dp))
                         FilterChip(selected = r.extra == "good", onClick = { vm.navigate(r.copy(extra = "good")) }, label = { Text("精华") }, modifier = Modifier.padding(start = 8.dp))
                         TextButton(onClick = { vm.compose(r.id) }) { Text("发帖") }
                         TextButton(onClick = { vm.action { a -> vm.api.followForum(a, r.id, true); "已关注贴吧" } }) { Text("关注") }
                         TextButton(onClick = { vm.action { a -> vm.api.followForum(a, r.id, false); "已取消关注贴吧" } }) { Text("取消关注") }
                     }
-                    LazyColumn(Modifier.weight(1f)) {
-                        if (r.kind == "forums") {
-                            if (vm.account != null) item { OutlinedButton(onClick = { vm.signAll() }, modifier = Modifier.padding(16.dp)) { Text("一键签到") } }
-                            if (vm.data.forums.isEmpty() && !vm.loading && vm.error.isBlank()) item { EmptyMessage(if (vm.account == null) "输入吧名即可浏览，登录后显示关注的贴吧" else "还没有关注的贴吧") }
-                            items(vm.data.forums, key = { it.first + ":" + it.second }) { (id, name) -> Row(Modifier.fillMaxWidth().clickable { vm.navigate(Route("forum", name)) }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text("${name}吧", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                                if (vm.account != null && id.toLongOrNull()?.let { it > 0 } == true) TextButton(onClick = { vm.action { a -> vm.api.signForum(a, id, name) } }) { Text("签到") }
-                            }; HorizontalDivider() }
-                        } else {
-                            if (shownThreads.isEmpty() && !vm.loading && vm.error.isBlank()) item { EmptyMessage(if (listFilter.isBlank()) "暂无内容" else "没有匹配结果") }
-                            items(shownThreads, key = { it.id + ":" + it.matchedPost }) { thread -> Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (managing) Checkbox(checked = thread.id in selected, onCheckedChange = { selected = if (it) selected + thread.id else selected - thread.id })
-                                ThreadRow(thread, vm.fontSize, !vm.manualMedia) {
-                                    if (managing) selected = if (thread.id in selected) selected - thread.id else selected + thread.id
-                                    else if (r.kind == "saved") vm.offlineThread(thread.id)
-                                    else vm.navigate(Route("thread", thread.id, thread.title, thread.matchedPost))
-                                }
-                            } }
-                            if (vm.data.hasMore && r.kind !in setOf("history", "saved")) item { OutlinedButton(onClick = { vm.load(vm.page + 1, append = true) }, enabled = !vm.loading, modifier = Modifier.fillMaxWidth().padding(16.dp)) { Text("加载下一页") } }
+                    PullRefreshContent(vm, Modifier.weight(1f), if (r.kind == "home") padding.calculateTopPadding() else 0.dp) {
+                    LazyColumn(Modifier.fillMaxSize(), state = feedState, contentPadding = PaddingValues(top = if (r.kind == "home") padding.calculateTopPadding() + 6.dp else 0.dp, bottom = padding.calculateBottomPadding())) {
+                        if (r.kind == "home" && vm.loading && shownThreads.isEmpty()) item {
+                            Box(Modifier.fillParentMaxHeight(0.7f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) { CircularProgressIndicator(color = IOSLayout.blue, modifier = Modifier.size(24.dp)); Text("正在加载帖子", Modifier.padding(top = 12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            }
                         }
+                        if (r.kind == "home" && vm.error.isNotBlank()) item {
+                            Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text(vm.error); TextButton(onClick = vm::retryLoad) { Text("重试") } }
+                        }
+                        if (shownThreads.isEmpty() && !vm.loading && vm.error.isBlank()) item { EmptyMessage(if (r.kind == "searchinput") "输入关键词开始搜索" else if (listFilter.isBlank()) "暂无内容" else "没有匹配结果") }
+                        items(shownThreads, key = { it.id + ":" + it.matchedPost }) { thread -> Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (managing) Checkbox(checked = thread.id in selected, onCheckedChange = { selected = if (it) selected + thread.id else selected - thread.id })
+                            ThreadRow(
+                                thread, vm.fontSize, !vm.manualMedia, homeFeed = r.kind == "home",
+                                onForum = if (managing || thread.forum.isBlank()) null else { { vm.navigate(Route("forum", thread.forum)) } },
+                                onUser = if (managing) null else { { if (thread.author.id.toLongOrNull()?.let { it > 0 } == true) vm.navigate(Route("profile", thread.author.id, thread.author.name)) } },
+                                onBlock = if (managing || thread.forum.isBlank()) null else { {
+                                    runCatching {
+                                        val key = java.security.MessageDigest.getInstance("SHA-256").digest(thread.forum.toByteArray()).joinToString("") { "%02x".format(it) }
+                                        vm.store.put("block", "forum:$key", JSONObject().put("type", "forum").put("value", thread.forum))
+                                        vm.load(1)
+                                    }.onFailure { vm.report("屏蔽未能保存") }
+                                } }
+                            ) {
+                                if (managing) selected = if (thread.id in selected) selected - thread.id else selected + thread.id
+                                else if (r.kind == "saved") vm.offlineThread(thread.id)
+                                else vm.navigate(Route("thread", thread.id, thread.title, thread.matchedPost))
+                            }
+                        } }
+                        if (vm.data.hasMore && r.kind !in setOf("history", "saved")) item { AutomaticPageFooter(vm) }
+                    }
                     }
                 }
             }
@@ -340,56 +384,43 @@ class MainActivity : ComponentActivity() {
 
 @Composable fun MenuRow(title: String, onClick: () -> Unit) { Column(Modifier.fillMaxWidth().clickable(onClick = onClick)) { Text(title, Modifier.padding(horizontal = 20.dp, vertical = 16.dp)); HorizontalDivider() } }
 @Composable fun EmptyMessage(text: String) { Box(Modifier.fillMaxWidth().padding(36.dp), contentAlignment = Alignment.Center) { Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
-@Composable fun ThreadRow(thread: Thread, size: Float, loadMedia: Boolean, click: () -> Unit) {
-    Column(Modifier.fillMaxWidth().clickable(onClick = click).padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Policy.avatar(thread.author.portrait)?.let { AsyncImage(model = it, contentDescription = null, modifier = Modifier.size(30.dp).clip(androidx.compose.foundation.shape.CircleShape)); Spacer(Modifier.width(8.dp)) }
-            Text(thread.author.name + if (thread.forum.isBlank()) "" else " · ${thread.forum}吧", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-        }
-        Text(thread.title, fontSize = size.sp, modifier = Modifier.padding(vertical = 8.dp))
-        if (thread.summary.isNotBlank()) Text(thread.summary, maxLines = 3, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = (size - 2).sp)
-        if (loadMedia && thread.previews.isNotEmpty()) Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            thread.previews.take(3).forEach { url -> AsyncImage(model = url, contentDescription = "帖子预览图", contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.weight(1f).height(105.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))) }
-        }
-        Text("${thread.replies} 回复", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 8.dp))
-    }; HorizontalDivider()
-}
 
 @OptIn(kotlinx.coroutines.FlowPreview::class)
-@Composable fun PostScreen(vm: AppViewModel) {
+@Composable fun PostScreen(vm: AppViewModel, padding: PaddingValues = PaddingValues()) {
     val p = vm.data.thread
     val r = vm.route
     if (vm.loading && vm.data.posts.isEmpty()) return
-    key(r.kind, r.id, r.extra, vm.page) {
+    key(r.kind, r.id, r.extra, vm.sort, vm.onlyAuthor) {
     val positionId = if (r.kind == "offline") "offline:${r.id}" else r.id
     val stored = remember(positionId) { vm.store.get("position", positionId) }
     val scroll = rememberLazyListState(stored?.optInt("index", 0)?.coerceIn(0, vm.data.posts.size + 2) ?: 0, stored?.optInt("offset", 0)?.coerceIn(0, 1000000) ?: 0)
-    LaunchedEffect(scroll, r.kind, vm.page) {
+    LaunchedEffect(scroll, r.kind) {
         if (r.kind in setOf("thread", "offline")) snapshotFlow { scroll.firstVisibleItemIndex to scroll.firstVisibleItemScrollOffset }.drop(1).distinctUntilChanged().debounce(300).collect { (index, offset) ->
-            try { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { vm.store.put("position", positionId, JSONObject().put("page", vm.page).put("index", index).put("offset", offset).put("total-pages", p?.pages ?: 1)) } }
+            val (visiblePage, pageIndex) = if (r.kind == "thread") threadReadingPosition(index, vm.data.posts.map { it.id }, vm.postPages, vm.page) else 1 to index
+            try { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { vm.store.put("position", positionId, JSONObject().put("page", visiblePage).put("index", pageIndex).put("offset", offset).put("total-pages", p?.pages ?: 1)) } }
             catch (e: kotlinx.coroutines.CancellationException) { throw e }
             catch (e: Exception) { vm.report("阅读位置未能保存，请检查本机剩余空间") }
         }
     }
-    LazyColumn(Modifier.fillMaxSize(), state = scroll) {
+    PullRefreshContent(vm, Modifier.fillMaxSize(), padding.calculateTopPadding()) {
+    LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface), state = scroll, contentPadding = padding) {
         if (p != null) item {
             Column(Modifier.padding(16.dp)) {
                 Text(p.thread.title, style = MaterialTheme.typography.titleLarge)
-                TextButton(onClick = { vm.navigate(Route("forum", p.thread.forum)) }) { Text("${p.thread.forum}吧") }
-                if (r.kind == "thread") Row {
-                    FilterChip(selected = vm.onlyAuthor, onClick = { vm.onlyAuthor = !vm.onlyAuthor; vm.load() }, label = { Text("只看楼主") })
-                    FilterChip(selected = vm.sort == 1, onClick = { vm.sort = if (vm.sort == 1) 0 else 1; vm.load() }, label = { Text("倒序") }, modifier = Modifier.padding(start = 8.dp))
-                }
+
             }
         }
-        items(vm.data.posts, key = { it.id }) { post ->
+        itemsIndexed(vm.data.posts, key = { _, post -> post.id }) { index, post ->
+            if (r.kind == "thread" && index == vm.data.posts.indexOfFirst { it.floor != 1 }) ReplyControls(vm)
+            if (r.kind == "subposts" || post.floor != 1) ReplyCommentRow(vm, post)
+            else {
             Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                Text("${post.author.name} · ${post.floor}楼", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable { if (post.author.id.toLongOrNull()?.let { it > 0 } == true) vm.navigate(Route("profile", post.author.id, post.author.name)) })
+                IOSPostAuthor(post.author, post.floor) { if (post.author.id.toLongOrNull()?.let { it > 0 } == true) vm.navigate(Route("profile", post.author.id, post.author.name)) }
                 SelectionContainer { Column { post.blocks.forEach { block -> ContentBlockView(block, vm) } } }
                 if (r.kind == "thread") Row {
                     var liked by remember(post.id) { mutableStateOf(post.liked) }
-                    TextButton(onClick = { vm.action(onSuccess = { liked = !liked }) { a -> vm.api.like(a, r.id, post.id, if (post.floor == 1) LikeObject.THREAD else LikeObject.POST, !liked); if (!liked) "已点赞" else "已取消点赞" } }) { Text(if (liked) "已赞" else "赞") }
-                    if (p != null) TextButton(onClick = { vm.compose(p.thread.forum, r.id, post.id, post.floor) }) { Text("回复") }
+                    TextButton(enabled = vm.likesEnabled, onClick = { vm.action(onSuccess = { liked = !liked }) { a -> vm.api.like(a, r.id, post.id, if (post.floor == 1) LikeObject.THREAD else LikeObject.POST, !liked); if (!liked) "已点赞" else "已取消点赞" } }) { Text(if (liked) "已赞" else "赞") }
+                    if (p != null && vm.repliesEnabled) TextButton(onClick = { vm.compose(p.thread.forum, r.id, post.id, post.floor) }) { Text("回复") }
                     if (post.subCount > 0 && p != null) TextButton(onClick = { vm.navigate(Route("subposts", r.id, title = p.thread.forum, extra = "${post.id}:${p.forumId}")) }) { Text("${post.subCount} 条楼中楼") }
                 }
                 if (r.kind == "offline") post.children.forEach { child ->
@@ -397,18 +428,16 @@ class MainActivity : ComponentActivity() {
                 }
                 if (r.kind == "subposts") Row {
                     var liked by remember(post.id) { mutableStateOf(post.liked) }
-                    TextButton(onClick = { vm.action(onSuccess = { liked = !liked }) { a -> vm.api.like(a, r.id, post.id, LikeObject.SUBPOST, !liked); if (!liked) "已点赞" else "已取消点赞" } }) { Text(if (liked) "已赞" else "赞") }
-                    TextButton(onClick = { vm.compose(r.title, r.id, r.extra.substringBefore(':'), subpost = post.id, replyTo = post.author.name) }) { Text("回复此条") }
+                    TextButton(enabled = vm.likesEnabled, onClick = { vm.action(onSuccess = { liked = !liked }) { a -> vm.api.like(a, r.id, post.id, LikeObject.SUBPOST, !liked); if (!liked) "已点赞" else "已取消点赞" } }) { Text(if (liked) "已赞" else "赞") }
+                    if (vm.repliesEnabled) TextButton(onClick = { vm.compose(r.title, r.id, r.extra.substringBefore(':'), subpost = post.id, replyTo = post.author.name) }) { Text("回复此条") }
                 }
             }; HorizontalDivider()
+            }
         }
-        if (r.kind == "thread" && p != null) item { Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = { vm.load((vm.page - 1).coerceAtLeast(1)) }, enabled = vm.page > 1 && !vm.loading) { Text("上一页") }
-            Text("${vm.page} / ${p.pages}")
-            OutlinedButton(onClick = { vm.load(vm.page + 1) }, enabled = vm.page < p.pages && !vm.loading) { Text("下一页") }
-        } }
-        if (r.kind == "thread" && p != null) item { Button(onClick = { vm.compose(p.thread.forum, r.id) }, modifier = Modifier.fillMaxWidth().padding(16.dp)) { Text("回复帖子") } }
-        if (r.kind == "subposts" && vm.data.hasMore) item { OutlinedButton(onClick = { vm.load(vm.page + 1, true) }, enabled = !vm.loading, modifier = Modifier.padding(16.dp)) { Text("更多楼中楼") } }
+        if (r.kind == "thread" && vm.data.posts.none { it.floor != 1 }) item { ReplyControls(vm) }
+        if (r.kind in setOf("thread", "subposts") && vm.data.hasMore) item { AutomaticPageFooter(vm) }
+        if (r.kind == "thread" && p != null && vm.repliesEnabled) item { Button(onClick = { vm.compose(p.thread.forum, r.id) }, modifier = Modifier.fillMaxWidth().padding(16.dp)) { Text("回复帖子") } }
+    }
     }
     }
 }
@@ -458,21 +487,5 @@ class MainActivity : ComponentActivity() {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event -> if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) player.pause() }
         owner?.lifecycle?.addObserver(observer)
         onDispose { owner?.lifecycle?.removeObserver(observer); player.release() }
-    }
-}
-
-@Composable fun AboutScreen() {
-    val context = LocalContext.current
-    var license by remember { mutableStateOf("") }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
-        Text("TiebaLite", style = MaterialTheme.typography.headlineMedium)
-        Text("${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", Modifier.padding(vertical = 12.dp))
-        Text("基于 infinityf4p/TiebaPure-iOS 的独立 Android 移植版。原项目采用 GPL-3.0-only，本衍生项目保留原作者、版权与许可。与百度及贴吧官方无隶属、授权或认可关系。")
-        TextButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/infinityf4p/TiebaPure-iOS"))) }) { Text("查看原项目源码") }
-        TextButton(onClick = { license = context.assets.open("LICENSE").bufferedReader().use { it.readText() } }) { Text("查看 GPL-3.0-only") }
-        TextButton(onClick = { license = context.assets.open("THIRD_PARTY_NOTICES.md").bufferedReader().use { it.readText() } }) { Text("第三方依赖与版权材料") }
-        TextButton(onClick = { license = context.assets.open("licenses/Apache-2.0.txt").bufferedReader().use { it.readText() } }) { Text("Apache-2.0 许可证") }
-        TextButton(onClick = { license = context.assets.open("licenses/Protobuf-BSD-3-Clause.txt").bufferedReader().use { it.readText() } }) { Text("Protobuf BSD-3-Clause 许可证") }
-        if (license.isNotBlank()) SelectionContainer { Text(license, style = MaterialTheme.typography.bodySmall) }
     }
 }

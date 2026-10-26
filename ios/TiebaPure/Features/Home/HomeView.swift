@@ -53,7 +53,7 @@ struct HomeView: View {
                     }
             }
         )
-        .toolbar(.visible, for: .tabBar)
+        .floatingRootTabBar(isVisible: showsFloatingTabBar)
         .onChange(of: horizontalSizeClass) { sizeClass in
             foldNavigationForSizeClassChange(to: sizeClass)
         }
@@ -98,16 +98,13 @@ struct HomeView: View {
         .navigationTitle("首页")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    activeSearch = SearchRoute(keyword: "")
-                } label: {
-                    Image(systemName: "magnifyingglass")
+            if #available(iOS 26.0, *) {
+                ToolbarItem(placement: .topBarTrailing) {
+                    homeSearchButton
                 }
-                .minTouchTarget()
-                .accessibilityLabel("搜索")
-                .accessibilityHint("打开单独的搜索页面")
-                .accessibilityIdentifier("home-search-button")
+                .sharedBackgroundVisibility(.hidden)
+            } else {
+                ToolbarItem(placement: .topBarTrailing) { homeSearchButton }
             }
         }
         .navigationDestination(isPresented: searchIsActive) {
@@ -428,21 +425,11 @@ struct HomeView: View {
                             }
                         }
                     }
-                } else if hasMore, isLoading == false, didLoad {
-                    Button {
-                        Task { await loadMore() }
-                    } label: {
-                        Label("加载更多", systemImage: "arrow.down.circle")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .minTouchTarget()
-                    .accessibilityHint("加载下一页推荐帖子")
-                    .padding(.horizontal, TiebaPureTheme.Spacing.md)
+
                 }
 
                 Color.clear
-                    .frame(height: 64)
+                    .frame(height: 112)
                     .accessibilityHidden(true)
             }
             .padding(.horizontal, TiebaPureTheme.Spacing.sm)
@@ -458,6 +445,27 @@ struct HomeView: View {
                 if isPresented == false { likeActionError = nil }
             }
         )
+    }
+
+    private var homeSearchButton: some View {
+        Button {
+            activeSearch = SearchRoute(keyword: "")
+        } label: {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 21, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 44, height: 44)
+                .floatingGlass(in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("搜索")
+        .accessibilityHint("打开单独的搜索页面")
+        .accessibilityIdentifier("home-search-button")
+    }
+
+    private var showsFloatingTabBar: Bool {
+        if case .thread? = navigationPath.last { return false }
+        return true
     }
 
     private func toggleHomeThreadLike(_ thread: ThreadSummary) {

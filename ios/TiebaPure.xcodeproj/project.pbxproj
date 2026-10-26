@@ -186,6 +186,7 @@
 		D9175F6F62D428CC171F73D7 /* BrowsingHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C32C727ADE31C67A3B02736 /* BrowsingHistoryView.swift */; };
 		D92FF26A20CE55595F45B81F /* MultipartFormDataTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2758D17C77814946EB5560DA /* MultipartFormDataTests.swift */; };
 		DA522E7CE4A6AF749533B6C3 /* VoiceAudioClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = E442EEBED99D57F019D339D0 /* VoiceAudioClient.swift */; };
+		DAF90B096C9A0E31C64A7847 /* FloatingRootTabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 689A44ABED6F00A3936F22B2 /* FloatingRootTabBar.swift */; };
 		DB2E0B012007D19C5D4F3B9D /* MediaGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 277C554E042BEC92DDCC065C /* MediaGridView.swift */; };
 		DB3881EB1B055DE5583FBE65 /* Post.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD2C30123EFF90A5F9BEE7C2 /* Post.swift */; };
 		DDD7176346D4B9BFD3A834BD /* SocialRelationshipState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9718D80CC5DA7EC934BCFEB /* SocialRelationshipState.swift */; };
@@ -360,6 +361,7 @@
 		67285F50B29BA765B74B5271 /* SwiftDataOrderedCollectionPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftDataOrderedCollectionPersistence.swift; sourceTree = "<group>"; };
 		674313EBDA3BABF79049EF20 /* AvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarView.swift; sourceTree = "<group>"; };
 		67A1242A6C7E6C6F3740D3E6 /* ForumThreadsRequestKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForumThreadsRequestKey.swift; sourceTree = "<group>"; };
+		689A44ABED6F00A3936F22B2 /* FloatingRootTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingRootTabBar.swift; sourceTree = "<group>"; };
 		68FBDB720D1FCC2A3138B0CC /* FollowedUsersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowedUsersView.swift; sourceTree = "<group>"; };
 		6A68DE1DD356B7AC4AB669F8 /* UserProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfile.swift; sourceTree = "<group>"; };
 		6AD842C2F8EBE015B4F98443 /* Abstract.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Abstract.pb.swift; sourceTree = "<group>"; };
@@ -537,6 +539,7 @@
 				994E9D3128F82A0683DA39E0 /* CapsuleLabel.swift */,
 				06656E39A13E9DD402A3E9D7 /* CompatibleUnavailableView.swift */,
 				40014AEAB18EA73BA47B8C64 /* CompatibleValueChange.swift */,
+				689A44ABED6F00A3936F22B2 /* FloatingRootTabBar.swift */,
 				78FABF04E476AC1533EBDFA2 /* InteractiveNavigationPop.swift */,
 				9DC309A0384A60EB41BF7B46 /* LegacyScrollTelemetry.swift */,
 				277C554E042BEC92DDCC065C /* MediaGridView.swift */,
@@ -1179,6 +1182,7 @@
 				AC8C9EFD5E2B710919306D8B /* FileContentDraftPersistence.swift in Sources */,
 				BED7DAF338555164F980FDE9 /* FileOrderedCollectionPersistence.swift in Sources */,
 				4ED79FF1DB72B276E756EBF2 /* FixtureTiebaAPI.swift in Sources */,
+				DAF90B096C9A0E31C64A7847 /* FloatingRootTabBar.swift in Sources */,
 				9B869CC8E0EE590D0B003B40 /* FollowedUsersView.swift in Sources */,
 				F81A17ADFC8827935D28CB43 /* Forum.swift in Sources */,
 				C144376E190882BF6A323835 /* ForumHubView.swift in Sources */,

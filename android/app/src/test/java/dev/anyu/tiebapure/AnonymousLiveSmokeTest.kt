@@ -14,6 +14,7 @@ class AnonymousLiveSmokeTest {
         val detail = api.thread(home.first().id, 1, null)
         assertTrue(detail.posts.isNotEmpty())
         assertTrue(detail.thread.id.toLong() > 0)
+        assertTrue("Hot replies should return a real post", api.thread(detail.thread.id, 1, null, hot = true).posts.isNotEmpty())
         val search = api.search("旅行", 1)
         assertTrue("Search should return real threads", search.isNotEmpty())
         val forum = api.forum("旅行", 1)

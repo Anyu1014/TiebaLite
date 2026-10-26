@@ -1,7 +1,7 @@
 {
   "name": "TiebaLite",
   "identifier": "dev.anyu.tiebalite",
-  "version": "1.4.15",
-  "build": 59,
+  "version": "1.0",
+  "build": 61,
   "urlScheme": "tiebalite"
 }

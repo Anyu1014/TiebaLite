@@ -35,7 +35,7 @@ struct ForumHubView: View {
             },
             listColumn: { hubColumn }
         )
-        .toolbar(.visible, for: .tabBar)
+        .floatingRootTabBar(isVisible: showsFloatingTabBar)
         .onChange(of: horizontalSizeClass) { sizeClass in
             bridgeDetailForSizeClassChange(to: sizeClass)
         }
@@ -179,6 +179,10 @@ struct ForumHubView: View {
                     }
                 }
             }
+            Color.clear.frame(height: 112)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .accessibilityHidden(true)
         }
         .scrollContentBackground(.hidden)
         .accessibilityIdentifier("forum-hub-list")
@@ -302,6 +306,11 @@ struct ForumHubView: View {
                 )
             }
         }
+    }
+
+    private var showsFloatingTabBar: Bool {
+        if case .thread? = navigationPath.last { return false }
+        return true
     }
 
     private var signSummaryIsPresented: Binding<Bool> {

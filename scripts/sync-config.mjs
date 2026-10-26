@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 export function validate(c) {
   if (typeof c.name !== 'string' || !c.name.trim() || /[\r\n$]/.test(c.name)) throw Error('Invalid app name');
   if (!/^[a-zA-Z][\w]*(\.[a-zA-Z][\w]*){2,}$/.test(c.identifier)) throw Error('Invalid application identifier');
-  if (!/^\d+\.\d+\.\d+$/.test(c.version) || !Number.isSafeInteger(c.build) || c.build < 1) throw Error('Invalid version/build');
+  if (!/^\d+\.\d+(?:\.\d+)?$/.test(c.version) || !Number.isSafeInteger(c.build) || c.build < 1) throw Error('Invalid version/build');
   if (!/^[a-z][a-z0-9-]*$/.test(c.urlScheme)) throw Error('Invalid URL scheme');
   return c;
 }

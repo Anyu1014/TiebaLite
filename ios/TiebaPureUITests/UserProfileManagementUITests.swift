@@ -103,6 +103,11 @@ final class UserProfileManagementUITests: XCTestCase {
         symbolIdentifier: String,
         in app: XCUIApplication
     ) -> XCUIElement {
+        let floatingIdentifiers = ["首页": "root-tab-home", "进吧": "root-tab-forums", "我的": "root-tab-me"]
+        if let identifier = floatingIdentifiers[label] {
+            let button = app.buttons[identifier]
+            if button.exists { return button }
+        }
         let symbolButton = app.buttons.matching(identifier: symbolIdentifier).firstMatch
         if symbolButton.exists { return symbolButton }
         return app.descendants(matching: .any)

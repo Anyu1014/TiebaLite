@@ -308,14 +308,9 @@ struct ThreadFavoritesView: View {
                 Task { await loadMore() }
             }
         } else if loader.canLoadMore {
-            // Search and the progress filter only see what is already loaded,
-            // so the list keeps a way to pull the next page even when the
-            // current filter leaves nothing on screen.
-            Button("加载更多收藏") {
-                Task { await loadMore() }
-            }
-            .frame(maxWidth: .infinity)
-            .accessibilityIdentifier("thread-favorites-load-more")
+            Color.clear
+                .frame(height: 1)
+                .task(id: loader.favorites.count) { await loadMore() }
         }
     }
 

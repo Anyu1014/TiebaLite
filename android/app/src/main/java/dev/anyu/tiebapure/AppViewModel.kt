@@ -30,6 +30,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var data by mutableStateOf(ScreenData()); private set
     var contextThreads by mutableStateOf<List<Thread>>(emptyList()); private set
     var loading by mutableStateOf(false); private set
+    var refreshing by mutableStateOf(false); private set
     var submitting by mutableStateOf(false); private set
     var saving by mutableStateOf(false); private set
     var saveProgress by mutableStateOf(""); private set
@@ -37,11 +38,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var error by mutableStateOf(""); private set
     var notice by mutableStateOf(""); private set
     var page by mutableIntStateOf(1); private set
+    var postPages by mutableStateOf<Map<String, Int>>(emptyMap()); private set
+    private var retryPage = 1
+    private var retryAppend = false
+    fun retryLoad() = load(retryPage, retryAppend)
+    fun loadNextPage() {
+        if (!loading && error.isBlank() && data.hasMore) load(page + 1, append = true)
+    }
     var sort by mutableIntStateOf(0)
+    var defaultReplySort by mutableIntStateOf(store.prefs.getInt("reader-reply-sort", 2).coerceIn(0, 2)); private set
+    fun selectDefaultReplySort(value: Int) { require(value in 0..2); store.prefs.edit().putInt("reader-reply-sort", value).apply(); defaultReplySort = value }
     var onlyAuthor by mutableStateOf(false)
     var darkMode by mutableStateOf(store.prefs.getString("theme", "system") ?: "system")
-    var fontSize by mutableFloatStateOf(store.prefs.getFloat("font-size", 16f))
+    var fontSize by mutableFloatStateOf(store.prefs.getFloat("font-size", 17f))
     var manualMedia by mutableStateOf(store.prefs.getBoolean("manual-media", false))
+    var newThreadsEnabled by mutableStateOf(store.prefs.getBoolean("allow-new-threads", true)); private set
+    var repliesEnabled by mutableStateOf(store.prefs.getBoolean("allow-replies", false)); private set
+    var likesEnabled by mutableStateOf(store.prefs.getBoolean("allow-likes", true)); private set
+    fun setContentPreferences(newThreads: Boolean = newThreadsEnabled, replies: Boolean = repliesEnabled, likes: Boolean = likesEnabled) {
+        store.prefs.edit().putBoolean("allow-new-threads", newThreads).putBoolean("allow-replies", replies).putBoolean("allow-likes", likes).apply()
+        newThreadsEnabled = newThreads; repliesEnabled = replies; likesEnabled = likes
+    }
+
     private val stack = mutableListOf<Route>()
     private var loadJob: Job? = null
     private var saveJob: Job? = null
@@ -49,6 +67,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var generation = 0
     private var accountGeneration = 0
     private var loginJob: Job? = null
+    private data class HomeSnapshot(val data: ScreenData, val page: Int, val error: String, val retryPage: Int, val retryAppend: Boolean)
+    private var homeSnapshot: HomeSnapshot? = null
 
     init {
         runCatching { store.loadAccount() }.onSuccess { account = it }.onFailure { error = "本机登录资料无法解密，请重新登录" }
@@ -59,13 +79,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun refreshFonts() { fonts = fontStore.list(); readerTypeface = fontStore.typeface(fontStore.selected()) }
     fun clearNotice() { notice = "" }
     fun navigate(next: Route, root: Boolean = false) {
+        if (route.kind == "home" && (!loading || data.threads.isNotEmpty())) homeSnapshot = HomeSnapshot(data, page, error, retryPage, retryAppend)
         if (next.kind == "forum" && next.id.trim().length in 1..100) store.put("forum", next.id, JSONObject().put("name", next.id))
         if (next.kind == "thread" && data.threads.isNotEmpty()) contextThreads = data.threads
         if (root) contextThreads = emptyList()
-        if (root) stack.clear() else stack.add(route)
+        if (root) stack.clear() else if (!(route.kind in setOf("search", "searchinput") && next.kind in setOf("search", "searchinput"))) stack.add(route)
         route = next
+        if (next.kind == "home") homeSnapshot?.let { cached ->
+            loadJob?.cancel(); generation++
+            data = cached.data; page = cached.page; error = cached.error; loading = false; refreshing = false
+            sort = 0; onlyAuthor = false; postPages = emptyMap()
+            retryPage = cached.retryPage; retryAppend = cached.retryAppend
+            return
+        }
         page = if (next.kind == "thread" && next.extra.isBlank()) store.get("position", next.id)?.optInt("page", 1)?.coerceAtLeast(1) ?: 1 else 1
-        sort = 0
+        sort = if (next.kind == "thread" && next.extra.isBlank() && store.get("position", next.id) == null) defaultReplySort else 0
         onlyAuthor = false
         data = ScreenData()
         load()
@@ -77,8 +105,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
     fun load(requestedPage: Int = page, append: Boolean = false) {
         loadJob?.cancel()
+        retryPage = requestedPage; retryAppend = append
         val current = ++generation
         val r = route; val a = account; val order = sort; val lz = onlyAuthor
+        refreshing = !append && requestedPage == 1 && (data.threads.isNotEmpty() || data.posts.isNotEmpty())
         loading = true; error = ""
         loadJob = viewModelScope.launch {
             try {
@@ -88,12 +118,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         "forum" -> ScreenData(threads = api.forum(r.id, requestedPage, order, r.extra == "good"))
                         "search" -> ScreenData(threads = api.search(r.id, requestedPage, r.extra))
                         "thread" -> {
-                            val p = api.thread(r.id, requestedPage, a, order == 1, lz, r.extra.takeIf(String::isNotBlank))
+                            val p = api.thread(r.id, requestedPage, a, order == 1, lz, r.extra.takeIf(String::isNotBlank), hot = order == 2)
                             store.put("history", r.id, p.thread.json())
                             val position = store.get("position", r.id)?.takeIf { it.optInt("page") == p.page } ?: JSONObject()
                             if (r.extra.isNotBlank() && requestedPage <= 1) position.put("index", (p.posts.indexOfFirst { it.id == r.extra } + 1).coerceAtLeast(0)).put("offset", 0)
                             store.put("position", r.id, position.put("page", p.page))
-                            ScreenData(thread = p, posts = p.posts)
+                            ScreenData(thread = p, posts = p.posts, hasMore = p.page < p.pages)
                         }
                         "subposts" -> api.subposts(r.id, r.extra.substringBefore(':'), r.extra.substringAfter(':'), requestedPage, a).let { ScreenData(posts = it, hasMore = it.size >= 10) }
                         "forums" -> {
@@ -114,16 +144,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             "following", "followers" -> result.users.isNotEmpty()
                             else -> result.hasMore
                         }
-                        result.copy(hasMore = more, threads = result.threads.filterNot(store::blocked).distinctBy { it.id to it.matchedPost }, users = result.users.distinctBy { it.id }, posts = result.posts.filterNot { post -> store.blocked(Thread(post.id, post.blocks.joinToString("") { it.text }, result.thread?.thread?.forum ?: r.title, post.author)) }.distinctBy { it.id })
+                        result.copy(hasMore = more, threads = result.threads.filterNot(store::blocked).distinctBy { it.id to it.matchedPost }, users = result.users.distinctBy { it.id }, posts = result.posts.filterNot { post -> store.blocked(Thread(post.id, post.blocks.joinToString("") { it.text }, result.thread?.thread?.forum ?: r.title, post.author)) }.map { post -> post.copy(children = post.children.filterNot { child -> store.blocked(Thread(child.id, child.blocks.joinToString("") { it.text }, result.thread?.thread?.forum ?: r.title, child.author)) }) }.distinctBy { it.id })
                     }
                 }
                 if (current == generation) {
-                    data = if (append) result.copy(threads = (data.threads + result.threads).distinctBy { it.id to it.matchedPost }, posts = (data.posts + result.posts).distinctBy { it.id }, users = (data.users + result.users).distinctBy { it.id }) else result
+                    val incomingPostPages = result.posts.associate { it.id to (result.thread?.page ?: requestedPage) }
+                    postPages = if (append) incomingPostPages + postPages else incomingPostPages
+                    data = if (append) result.appendTo(data) else result
                     page = result.thread?.page ?: requestedPage
                 }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { if (current == generation) { error = e.message?.take(240) ?: "加载失败，请重试"; if (e is SessionExpired) logout() } }
-            finally { if (current == generation) loading = false }
+            finally { if (current == generation) { loading = false; refreshing = false } }
         }
     }
     fun action(onSuccess: () -> Unit = {}, block: suspend (Account) -> String) {
@@ -149,6 +181,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 actions.toList().forEach { it.cancelAndJoin() }; actions.clear(); saveJob?.cancelAndJoin(); loadJob?.cancelAndJoin(); generation++
                 withContext(Dispatchers.IO) { store.saveAccount(a) }
                 accountGeneration++
+                homeSnapshot = null
                 account = a; notice = "登录成功"; onSuccess(); load()
                 signing = false; submitting = false
             } catch (e: CancellationException) { throw e }
@@ -170,6 +203,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 CookieManager.getInstance().flush()
                 WebStorage.getInstance().deleteAllData()
                 navigate(Route("me"), root = true)
+                homeSnapshot = null
                 notice = "已退出登录"
             } catch (e: Exception) { report("退出清理失败，请重试") }
         }
@@ -260,6 +294,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun compose(forum: String, tid: String? = null, pid: String? = null, floor: Int = 1, subpost: String? = null, replyTo: String = "") {
+        if (tid == null && !newThreadsEnabled || tid != null && !repliesEnabled) { report("请先在设置中开启" + if (tid == null) "允许发帖" else "允许回帖"); return }
         if (account == null) { report("请先登录百度账号"); return }
         val target = JSONObject().put("floor", floor).put("reply-to", replyTo)
         if (tid != null) target.put("tid", tid)
@@ -273,6 +308,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val r = route
         val target = JSONObject(r.extra)
         val tid = target.optString("tid").takeIf(String::isNotBlank)
+        if (tid == null && !newThreadsEnabled || tid != null && !repliesEnabled) { report("当前内容发送已在设置中关闭，草稿保持不变"); return }
         if (text.graphemes() > 10000 || (tid == null && (title.isBlank() || title.graphemes() > 64))) { report("主题标题限 64 字，正文限 10000 字"); return }
         if (text.isBlank() && imageUris.isEmpty()) { report("请输入正文或选择回复图片"); return }
         submitting = true

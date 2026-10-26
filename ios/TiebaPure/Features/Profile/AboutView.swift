@@ -1,8 +1,7 @@
 import SwiftUI
 
 struct AboutView: View {
-    private let sourceURL = URL(string: "https://github.com/infinityf4p/TiebaPure-iOS")!
-    private let authorURL = URL(string: "https://github.com/infinityf4p")!
+    private let sourceURL = URL(string: "https://github.com/Anyu1014/TiebaLite")!
     private let gplURL = URL(string: "https://www.gnu.org/licenses/gpl-3.0.html")!
     private let swiftProtobufLicenseURL = URL(
         string: "https://github.com/apple/swift-protobuf/blob/1.38.1/LICENSE.txt"
@@ -11,28 +10,27 @@ struct AboutView: View {
     var body: some View {
         Form {
             Section(Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "TiebaPure") {
-                Text("基于 TiebaPure-iOS 的独立二次开发版本，保留原项目作者和开源许可。")
                 LabeledContent("版本", value: versionText)
                 LabeledContent("项目作者") {
-                    Link("infinityf4p", destination: authorURL)
+                    Text("Anyu").foregroundStyle(.blue)
                 }
                 Text("以浏览为主的非官方百度贴吧客户端；登录后支持关注、点赞，以及实验性的发帖与回复。与百度公司及贴吧官方无隶属、授权或认可关系。")
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             Section("开源与许可") {
-                Link("查看 TiebaPure-iOS 源码", destination: sourceURL)
+                Link("查看 TiebaLite 源码", destination: sourceURL)
                     .accessibilityHint("在浏览器打开本应用源码")
 
                 NavigationLink {
                     OpenSourceLicenseView(
-                        title: "TiebaPure-iOS",
+                        title: "TiebaLite",
                         resourceName: "LICENSE",
                         resourceExtension: nil,
                         fallbackURL: gplURL
                     )
                 } label: {
-                    LabeledContent("TiebaPure-iOS", value: "GPL-3.0-only")
+                    LabeledContent("TiebaLite", value: "GPL-3.0-only")
                 }
 
                 NavigationLink {

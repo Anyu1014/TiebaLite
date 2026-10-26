@@ -387,17 +387,7 @@ struct SearchResultsView: View {
                                             if page <= 1 { await reload() } else { await loadMore() }
                                         }
                                     }
-                                } else if hasMore, isLoading == false, didLoad {
-                                    Button {
-                                        Task { await loadMore() }
-                                    } label: {
-                                        Label("加载更多搜索结果", systemImage: "arrow.down.circle")
-                                            .frame(maxWidth: .infinity)
-                                    }
-                                    .buttonStyle(.bordered)
-                                    .minTouchTarget()
-                                    .padding(.horizontal, TiebaPureTheme.Spacing.md)
-                                    .accessibilityIdentifier("search-results-load-more")
+
                                 }
 
                                 Color.clear

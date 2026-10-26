@@ -299,11 +299,14 @@ private struct MainTabView: View {
                 legacyTabView
             }
         }
-        .background(
-            TabSelectionObserver {
-                homeRefreshToken += 1
+        .environment(\.floatingRootTabSelection, tabSelection)
+        .background {
+            if #unavailable(iOS 26.0) {
+                TabSelectionObserver {
+                    homeRefreshToken += 1
+                }
             }
-        )
+        }
     }
 
     @available(iOS 18.0, *)
@@ -346,10 +349,15 @@ private struct MainTabView: View {
     }
 
     private var tabSelection: Binding<RootTab> {
-        Binding(
+        if #available(iOS 26.0, *) { return $selectedTab }
+        return Binding(
             get: { selectedTab },
             set: { newValue in
-                selectedTab = newValue
+                if selectedTab == .home, newValue == .home {
+                    homeRefreshToken &+= 1
+                } else {
+                    selectedTab = newValue
+                }
             }
         )
     }

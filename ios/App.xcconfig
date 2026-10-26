@@ -1,6 +1,6 @@
 // Generated from ../app-config.json by scripts/sync-config.mjs
 APP_DISPLAY_NAME = TiebaLite
 APP_IDENTIFIER = dev.anyu.tiebalite
-APP_VERSION = 1.4.15
-APP_BUILD = 59
+APP_VERSION = 1.0
+APP_BUILD = 61
 APP_URL_SCHEME = tiebalite

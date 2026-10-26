@@ -7,6 +7,34 @@ final class TiebaPureUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testFloatingRootBarOverlaysFeedThroughScreenBottom() {
+        let app = launchApp()
+        let feed = app.scrollViews["home-feed-scroll-view"]
+        let customBar = app.descendants(matching: .any)["floating-root-tab-bar"]
+        let bar = app.tabBars.firstMatch.waitForExistence(timeout: 2) ? app.tabBars.firstMatch : customBar
+        XCTAssertTrue(feed.waitForExistence(timeout: 20))
+        XCTAssertTrue(bar.waitForExistence(timeout: 5))
+        XCTAssertEqual(feed.frame.maxY, app.frame.maxY, accuracy: 2,
+                       "Feed viewport must extend below the floating capsule to the screen edge")
+        XCTAssertGreaterThan(feed.frame.maxY, bar.frame.maxY)
+        XCTAssertTrue(rootTab("首页", in: app).isSelected)
+        rootTab("进吧", in: app).tap()
+        XCTAssertTrue(app.navigationBars["进吧"].waitForExistence(timeout: 5))
+        rootTab("我的", in: app).tap()
+        XCTAssertTrue(app.navigationBars["我的"].waitForExistence(timeout: 5))
+    }
+
+    func testNativeLiquidGlassBarSupportsDraggingSelection() throws {
+        let app = launchApp()
+        let bar = app.tabBars.firstMatch
+        guard bar.waitForExistence(timeout: 5) else { throw XCTSkip("Native liquid glass requires iOS 26 or later") }
+        let home = rootTab("首页", in: app)
+        let me = rootTab("我的", in: app)
+        home.press(forDuration: 0.2, thenDragTo: me)
+        expectation(for: NSPredicate(format: "isSelected == true"), evaluatedWith: me)
+        waitForExpectations(timeout: 5)
+    }
+
     func testLaunchShowsHomeWithoutLoginAndRootTabs() {
         let app = launchApp()
 
@@ -3162,7 +3190,7 @@ final class TiebaPureUITests: XCTestCase {
         )
         XCTAssertLessThanOrEqual(
             finalFrame.maxY,
-            app.tabBars.firstMatch.frame.minY,
+            (app.tabBars.firstMatch.exists ? app.tabBars.firstMatch : app.descendants(matching: .any)["floating-root-tab-bar"]).frame.minY,
             "像素比较前图片底部不得被标签栏遮挡"
         )
         XCTAssertEqual(media.frame.width, initialFrame.width, accuracy: 1)
@@ -3505,9 +3533,12 @@ final class TiebaPureUITests: XCTestCase {
         let app = launchApp()
 
         rootTab("我的", in: app).tap()
-        XCTAssertTrue(waitForElement(named: "关于 TiebaPure", in: app, maxSwipes: 4))
-        app.buttons["关于 TiebaPure"].tap()
-        XCTAssertTrue(waitForLabelContaining("infinityf4p", in: app, maxSwipes: 2))
+        XCTAssertTrue(waitForElement(named: "关于 TiebaLite", in: app, maxSwipes: 4))
+        app.buttons["关于 TiebaLite"].tap()
+        XCTAssertTrue(waitForLabelContaining("Anyu", in: app, maxSwipes: 2))
+        XCTAssertTrue(waitForLabelContaining("1.0", in: app, maxSwipes: 2))
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "基于 infinityf4p")).firstMatch.exists)
+        XCTAssertTrue(waitForLabelContaining("查看 TiebaLite 源码", in: app, maxSwipes: 2))
         XCTAssertTrue(waitForLabelContaining("开源与许可", in: app, maxSwipes: 4))
         XCTAssertTrue(waitForLabelContaining("GPL-3.0-only", in: app, maxSwipes: 5))
         XCTAssertTrue(waitForLabelContaining("SwiftProtobuf", in: app, maxSwipes: 5))
@@ -3520,7 +3551,7 @@ final class TiebaPureUITests: XCTestCase {
         gplRow.tap()
         XCTAssertTrue(waitForLabelContaining("GNU GENERAL PUBLIC LICENSE", in: app, maxSwipes: 2))
 
-        app.navigationBars["TiebaPure-iOS"].buttons.firstMatch.tap()
+        app.navigationBars["TiebaLite"].buttons.firstMatch.tap()
         let dependencyRow = app.buttons.matching(
             NSPredicate(format: "label CONTAINS %@", "Apache-2.0")
         ).firstMatch
@@ -3544,11 +3575,8 @@ final class TiebaPureUITests: XCTestCase {
         let app = launchApp(scenario: "paginationFailure")
         XCTAssertTrue(threadRows(in: app).firstMatch.waitForExistence(timeout: 8))
         let retry = app.buttons["重试"]
-        if waitForElement(named: "重试", in: app, maxSwipes: 8) == false {
-            XCTAssertTrue(waitForElement(named: "加载更多", in: app, maxSwipes: 8))
-            app.buttons["加载更多"].tap()
-            XCTAssertTrue(waitForElement(named: "重试", in: app, maxSwipes: 8))
-        }
+        XCTAssertTrue(waitForElement(named: "重试", in: app, maxSwipes: 8))
+        XCTAssertFalse(app.buttons["加载更多"].exists)
         retry.tap()
         XCTAssertFalse(retry.waitForExistence(timeout: 2))
         XCTAssertTrue(threadRows(in: app).firstMatch.exists)
@@ -6212,6 +6240,11 @@ final class TiebaPureUITests: XCTestCase {
     }
 
     private func rootTab(_ label: String, in app: XCUIApplication) -> XCUIElement {
+        let floatingIdentifiers = ["首页": "root-tab-home", "进吧": "root-tab-forums", "我的": "root-tab-me"]
+        if let identifier = floatingIdentifiers[label] {
+            let button = app.buttons[identifier]
+            if button.exists { return button }
+        }
         let symbolIdentifier: String?
         switch label {
         case "首页": symbolIdentifier = "house"

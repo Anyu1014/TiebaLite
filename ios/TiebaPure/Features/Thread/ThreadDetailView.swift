@@ -600,8 +600,6 @@ struct ThreadDetailView: View {
 
             if let errorMessage {
                 InlineLoadErrorView(message: errorMessage, retry: retryInlineLoad)
-            } else if hasMore, isLoading == false, didLoad {
-                loadMoreRepliesButton
             }
         } header: {
             ReplyControlBar(
@@ -978,23 +976,6 @@ struct ThreadDetailView: View {
               ) else { return }
         dismissAfterOwnThreadDeletionWhenVisible = false
         dismiss()
-    }
-
-    private var loadMoreRepliesButton: some View {
-        Button(action: requestMoreReplies) {
-            Text("加载更多回复")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.plain)
-        .minTouchTarget()
-        .padding(.vertical, TiebaPureTheme.Spacing.xs)
-        .accessibilityIdentifier("thread-replies-load-more")
-    }
-
-    private func requestMoreReplies() {
-        Task { await loadMore() }
     }
 
     private var accountFavoriteErrorIsPresented: Binding<Bool> {
@@ -2931,19 +2912,7 @@ private struct SubpostListSheet: View {
                                         if nextPage <= 1 { await reload() } else { await loadMore() }
                                     }
                                 }
-                            } else if hasMore, isLoading == false, didLoad {
-                                Button {
-                                    Task { await loadMore() }
-                                } label: {
-                                    Text("加载更多楼中楼回复")
-                                        .font(.footnote)
-                                        .foregroundStyle(.secondary)
-                                        .frame(maxWidth: .infinity)
-                                }
-                                .buttonStyle(.plain)
-                                .minTouchTarget()
-                                .padding(.vertical, TiebaPureTheme.Spacing.xs)
-                                .accessibilityIdentifier("subposts-load-more")
+
                             }
 
                             Color.clear

@@ -5,5 +5,9 @@
 </style>
 <header><h1>TiebaLite · 双端预览</h1><nav aria-label="预览页面"><button aria-pressed="true" data-view="home">首页</button> <button aria-pressed="false" data-view="thread">帖子</button></nav></header>
 <main><section><h2>iOS · 界面参考</h2><p>原项目界面截图；本机尚无 iOS 模拟器运行时，非当前运行画面。</p><img id="ios" src="ios-home.png" alt="iOS 首页参考截图"></section><section><h2>Android · 模拟器截图</h2><p>Android 35 实际运行截图：10/25 首页、10/26 最终 Release 帖子。静态截图，非交互模拟器。</p><img id="android" src="android-home.png" alt="Android 首页运行截图"></section></main>
-<script>document.querySelectorAll('button').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('button').forEach(item=>item.setAttribute('aria-pressed',String(item===button)));for(const platform of ['ios','android']){const image=document.getElementById(platform);image.src=platform+'-'+button.dataset.view+'.png';image.alt=platform+' '+button.textContent+'截图';}}));</script>
+<script>
+const selectedPlatform=new URLSearchParams(location.search).get('platform');
+const platforms=['ios','android'].includes(selectedPlatform)?[selectedPlatform]:['ios','android'];
+if(platforms.length===1){const name=selectedPlatform==='ios'?'iOS':'Android';document.title='TiebaLite · '+name+' 预览';document.querySelector('h1').textContent=document.title;for(const platform of ['ios','android'])if(platform!==selectedPlatform)document.getElementById(platform).closest('section').remove();const main=document.querySelector('main');main.style.gridTemplateColumns='minmax(0,390px)';main.style.justifyContent='center';}
+document.querySelectorAll('button').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('button').forEach(item=>item.setAttribute('aria-pressed',String(item===button)));for(const platform of platforms){const image=document.getElementById(platform);image.src=platform+'-'+button.dataset.view+'.png';image.alt=platform+' '+button.textContent+'截图';}}));</script>
 </html>

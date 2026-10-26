@@ -1,21 +1,27 @@
 # TiebaLite
 
-基于 infinityf4p/TiebaPure-iOS 的独立双端二次开发工程。版本 1.4.15（59），应用标识 `dev.anyu.tiebalite`。iOS 保留原生 SwiftUI 工程与原有功能；Android 使用 Kotlin、Compose、Material 3 移植主要业务。未与百度、贴吧官方或其他同名项目建立隶属、授权或认可关系。
+Anyu 维护的非官方百度贴吧客户端。版本 **1.0（build 61）**，应用标识 `dev.anyu.tiebalite`。iOS 使用 SwiftUI，Android 使用 Kotlin 与 Compose。与百度及贴吧官方无隶属、授权或认可关系。
 
-2026-10-25～26 修改：独立名称、应用标识和链接协议，接入用户指定白角桌面图标，新增 Android 客户端、构建脚本、协议验证与交付文档。上游作者、感谢名单和许可证保留于 `ios/README.md`、`ios/LICENSE`、`ios/LICENSES/`。固定上游提交及来源见 [UPSTREAM](docs/UPSTREAM.md)。本工程代码按 [GPL-3.0-only](LICENSE) 提供；用户图标与第三方动态内容的来源单独见 [资源清单](docs/RESOURCES.md)。
+- [1.0 源码分支](https://github.com/Anyu1014/TiebaLite/tree/1.0)
+- [1.0 发行版与安装包](https://github.com/Anyu1014/TiebaLite/releases/tag/1.0)
+- [本版变化和验收范围](docs/releases/1.0.md)
 
-## 当前交付
+## 1.0
 
-- `releases/android/TiebaLite-1.4.15-release.apk`：本地独立密钥签名的 Android Release 包；另保留 Debug 测试包。
-- `releases/ios/TiebaLite-1.4.15-unsigned.ipa`：Release 归档生成的未签名 IPA，须用匹配两个 Bundle ID 的证书和描述文件签名后安装。
-- `releases/TiebaLite-1.4.15-source.zip`：包含双端源码、协议、资源、许可和构建脚本的对应源码快照。
-- `releases/manifest.json`、`releases/SHA256SUMS`：对应提交、工具信息和产物校验值。构建产物与私钥不进入 Git 或源码包。
+- iOS 26/27 使用系统原生标签栏，液态玻璃和拖动选择由系统管理；旧版 iOS 使用兼容悬浮栏。
+- Android 统一三栏布局，磨砂参考 Anyu；内容延伸至屏幕底部，评论区采用分层楼中楼预览。
+- 刷到底部自动续载，顶部下拉手动刷新；从其他底栏页面切回首页保留内容和位置。
+- 关于页显示版本1.0、作者Anyu，源码链接指向本仓库，GPL许可条目名称显示TiebaLite。
 
-Android 已通过真实匿名接口、专用模拟器安装启动及存储测试。iOS 已通过编译、测试目标编译和归档；本机无 iOS 模拟器运行时，未做安装启动验收。登录后的发帖、资料修改等写操作尚未用真实账号验证。完整证据见 [验证报告](docs/VERIFICATION.md)。
+## 安装包
 
-## 开发入口
+发行版提供 `TiebaLite-1.0.apk`（Android签名Release）与 `TiebaLite-1.0-unsigned.ipa`（iOS可重签包），以及对应源码zip、manifest和SHA256校验文件。
 
-统一工具箱为 `/Users/y/toolchains`，开始前阅读其 `README.md`。复用 Xcode 27、JDK 21、Android SDK 35/36、Gradle 8.14.3；双端配置在 `app-config.json`。
+iOS 开发签名与通用分发不同：本机可以为已登记设备签名安装，开发签名包含设备描述文件且有有效期限。公开发行保留未签名IPA供使用者自行签名。签名私钥、密码、描述文件和设备备份不会进入源码仓库或源码zip。
+
+## 构建
+
+本机工具统一使用 `/Users/y/toolchains`，先阅读其README。配置来自 `app-config.json`。
 
 ```sh
 source /Users/y/toolchains/env.sh
@@ -24,18 +30,18 @@ bash scripts/build-ios.sh ipa
 bash scripts/build-android.sh lintDebug
 ```
 
-Android Release 签名、iOS 签名与模拟器测试另见 [iOS 构建](docs/BUILD_IOS.md)、[Android 构建](docs/BUILD_ANDROID.md)。
+Release签名及设备安装方法见 [Android构建](docs/BUILD_ANDROID.md)、[iOS构建](docs/BUILD_IOS.md)。主要工具为Xcode27、JDK21、Android SDK36和Gradle8.14.3。
 
-## 文档
+## 来源与许可
+
+本项目基于 [infinityf4p/TiebaPure-iOS](https://github.com/infinityf4p/TiebaPure-iOS) 进行双端二次开发，固定上游提交和原始版本见 [UPSTREAM](docs/UPSTREAM.md)。上游作者、感谢名单和许可保留在 `ios/README.md`、`ios/LICENSE` 与 `ios/LICENSES/`。项目代码遵循 [GPL-3.0-only](LICENSE)，第三方组件保留各自许可与版权说明。[资源清单](docs/RESOURCES.md) 单独记录图标和动态内容来源。
+
+## 文档与验证
 
 - [架构](docs/ARCHITECTURE.md)、[功能与双端差异](docs/FEATURES.md)、[开发约定](docs/DEVELOPMENT.md)
-- [已知问题](docs/KNOWN_ISSUES.md)、[验证报告](docs/VERIFICATION.md)、[进度](docs/PROGRESS.md)
-- [协议移植笔记](docs/ANDROID_PROTOCOL_NOTES.md)、[许可证审查](docs/LICENSE_AUDIT.md)、[依赖](docs/DEPENDENCIES.md)、[资源](docs/RESOURCES.md)
+- [已知问题](docs/KNOWN_ISSUES.md)、[验证报告](docs/VERIFICATION.md)、[开发记录](docs/PROGRESS.md)
+- [许可证审查](docs/LICENSE_AUDIT.md)、[依赖](docs/DEPENDENCIES.md)
 
-右侧预览由 `previews/index.html` 提供：首页/帖子可切换。iOS 为上游参考截图；Android 为本机模拟器实际截图，均为静态画面，不能代替设备验收。
+Android原生检查覆盖自动续载、下拉刷新、首页返回和许可正文。iOS区分编译、签名、安装、启动及手动体验验收；真机启动不等于所有业务通过验收。真实账号写操作和完整系统版本矩阵尚未验收。
 
-```sh
-python3 -m http.server 8768 --bind 127.0.0.1 --directory previews
-```
-
-保留完整只读上游仓库 `original-source/`，开发使用 `ios/` 和 `android/`。没有推送、上传、上架或安装用户真机。
+`previews/ios-layout.html` 是早期网页布局示意，不能代表最新系统原生液态玻璃。开发使用 `ios/` 与 `android/`；本机完整只读上游克隆 `original-source/` 不重复放入源码zip。

@@ -160,8 +160,13 @@ struct MeView: View {
                     .buttonStyle(.plain)
                     .accessibilityHint("查看来源、许可证和源码链接")
                 }
+                Color.clear.frame(height: 112)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .accessibilityHidden(true)
             }
             .navigationTitle("我的")
+            .navigationBarTitleDisplayMode(.inline)
             .interactiveNavigationPopRevealSource()
             .navigationDestination(for: MeNavigationRoute.self) { route in
                 destination(for: route)
@@ -188,7 +193,12 @@ struct MeView: View {
                 }
             }
         }
-        .toolbar(.visible, for: .tabBar)
+        .floatingRootTabBar(isVisible: showsFloatingTabBar)
+    }
+
+    private var showsFloatingTabBar: Bool {
+        if case .thread? = navigationPath.last { return false }
+        return true
     }
 
     private var browsingHistoryAccessibilityLabel: String {

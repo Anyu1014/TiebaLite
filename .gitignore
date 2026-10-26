@@ -13,3 +13,10 @@ ios/DerivedData/
 *.p12
 *.jks
 *.keystore
+
+.env
+.env.*
+*.p8
+*.pem
+*.key
+*.pfx

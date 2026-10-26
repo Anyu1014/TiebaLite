@@ -11,7 +11,7 @@ bash scripts/build-ios.sh debug
 bash scripts/build-ios.sh ipa
 ```
 
-脚本同步 App.xcconfig 并生成 Xcode 工程；Release归档在 `.build/TiebaLite.xcarchive`，IPA在 `releases/ios/TiebaLite-1.4.15-unsigned.ipa`。包含主应用及Open In扩展，未签名。不能把ZIP检查、归档成功当成已可直接安装。
+脚本同步 App.xcconfig 并生成 Xcode 工程；Release归档在 `.build/TiebaLite.xcarchive`，IPA在 `releases/ios/TiebaLite-1.0-unsigned.ipa`。包含主应用及Open In扩展，未签名。不能把ZIP检查、归档成功当成已可直接安装。
 
 具备已安装模拟器时：
 
@@ -30,3 +30,11 @@ bash scripts/build-ios.sh export '/绝对路径/ExportOptions.plist'
 ```
 
 ExportOptions须与实际开发、Ad Hoc或分发方式匹配。不得将证书私钥、密码或描述文件放进Git/源码zip。本次没有安装用户iPhone。
+
+## 1.0/build61 设备签名记录
+
+本轮使用本机开发者账号与Automatic Signing，为主应用和Open In扩展生成匹配描述文件，开发签名归档、原位安装和启动已在已登记iPhone上完成。开发IPA仅支持描述文件中的设备且有有效期限，不属于通用分发。签名文件和设备备份留在本机忽略目录。
+
+需要自动配置时，在已有Xcode账号环境运行签名归档可加 `-allowProvisioningUpdates -allowProvisioningDeviceRegistration CODE_SIGN_STYLE=Automatic`，DEVELOPMENT_TEAM以自己的账号为准。更新已有应用前先停止本应用并从appDataContainer复制和校验备份；使用devicectl install app原位更新，不卸载、不清理设备容器。
+
+iOS26/27使用系统原生TabView标签栏，不隐藏/替换系统标签栏，也不拦截其拖动选择；旧系统保留兼容悬浮栏。网页示意不代表原生玻璃的实际交互。

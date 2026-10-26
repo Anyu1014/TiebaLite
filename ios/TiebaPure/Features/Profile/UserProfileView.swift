@@ -397,16 +397,7 @@ struct UserProfileView: View {
                             else { await loadMoreThreads() }
                         }
                     }
-                } else if hasMoreThreads, isLoadingThreads == false {
-                    Button {
-                        Task { await loadMoreThreads() }
-                    } label: {
-                        Label("加载更多用户帖子", systemImage: "arrow.down.circle")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .minTouchTarget()
-                    .accessibilityIdentifier("user-profile-threads-load-more")
+
                 }
             }
             .padding(.horizontal, TiebaPureTheme.Spacing.sm)

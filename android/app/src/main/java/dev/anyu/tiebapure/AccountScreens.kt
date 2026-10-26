@@ -19,9 +19,9 @@ import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
 
-@Composable fun ProfileScreen(vm: AppViewModel) {
+@Composable fun ProfileScreen(vm: AppViewModel, padding: PaddingValues = PaddingValues()) {
     val p = vm.data.profile ?: return
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp).padding(bottom = padding.calculateBottomPadding())) {
         Text(p.user.name, style = MaterialTheme.typography.headlineSmall)
         Text(p.intro.ifBlank { "还没有简介" }, Modifier.padding(vertical = 16.dp))
         Row {
@@ -38,24 +38,24 @@ import org.json.JSONObject
     }
 }
 
-@Composable fun RelationshipScreen(vm: AppViewModel) {
-    LazyColumn {
+@Composable fun RelationshipScreen(vm: AppViewModel, padding: PaddingValues = PaddingValues()) {
+    LazyColumn(contentPadding = PaddingValues(bottom = padding.calculateBottomPadding())) {
         if (vm.data.users.isEmpty() && !vm.loading && vm.error.isBlank()) item { EmptyMessage("暂无用户") }
         items(vm.data.users, key = { it.id }) { u ->
             MenuRow(u.name) { vm.navigate(Route("profile", u.id, u.name)) }
         }
-        if (vm.data.hasMore) item { OutlinedButton(onClick = { vm.load(vm.page + 1, true) }, enabled = !vm.loading, modifier = Modifier.fillMaxWidth().padding(16.dp)) { Text("加载下一页") } }
+        if (vm.data.hasMore) item { AutomaticPageFooter(vm) }
     }
 }
 
-@Composable fun EditProfileScreen(vm: AppViewModel) {
+@Composable fun EditProfileScreen(vm: AppViewModel, padding: PaddingValues = PaddingValues()) {
     val p = vm.data.profile ?: return
     if (p.user.id != vm.account?.uid) { Text("只能编辑自己的资料"); return }
     var name by remember(p.user.id) { mutableStateOf(p.user.name) }
     var intro by remember(p.user.id) { mutableStateOf(p.intro) }
     var gender by remember(p.user.id) { mutableIntStateOf(p.gender.coerceIn(0, 2)) }
     var confirm by remember { mutableStateOf(false) }
-    Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp).padding(bottom = padding.calculateBottomPadding())) {
         OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("昵称") }, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(value = intro, onValueChange = { intro = it }, label = { Text("简介") }, modifier = Modifier.fillMaxWidth().padding(top = 12.dp), minLines = 3)
         Row { listOf(0 to "不更改", 1 to "男", 2 to "女").forEach { (v, label) -> FilterChip(selected = gender == v, onClick = { gender = v }, label = { Text(label) }, modifier = Modifier.padding(end = 8.dp)) } }

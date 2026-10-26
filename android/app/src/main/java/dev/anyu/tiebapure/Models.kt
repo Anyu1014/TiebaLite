@@ -8,8 +8,8 @@ import java.security.MessageDigest
 data class User(val id: String = "", val name: String = "贴吧用户", val portrait: String = "")
 enum class LikeObject(val value: Int) { THREAD(3), POST(1), SUBPOST(2) }
 data class Block(val type: Int, val text: String = "", val url: String = "", val localFile: String = "")
-data class Thread(val id: String, val title: String, val forum: String = "", val author: User = User(), val summary: String = "", val replies: Int = 0, val previews: List<String> = emptyList(), val matchedPost: String = "")
-data class Post(val id: String, val floor: Int, val author: User, val blocks: List<Block>, val subCount: Int = 0, val liked: Boolean = false, val children: List<Post> = emptyList())
+data class Thread(val id: String, val title: String, val forum: String = "", val author: User = User(), val summary: String = "", val replies: Int = 0, val previews: List<String> = emptyList(), val matchedPost: String = "", val likes: Long? = null, val forumAvatar: String = "", val timestamp: Long = 0, val collected: Boolean = false)
+data class Post(val id: String, val floor: Int, val author: User, val blocks: List<Block>, val subCount: Int = 0, val liked: Boolean = false, val children: List<Post> = emptyList(), val timestamp: Long = 0, val ipAddress: String = "", val likes: Long? = null, val authorLevel: Int = 0, val authorLevelName: String = "")
 data class ThreadPage(val thread: Thread, val forumId: String, val posts: List<Post>, val page: Int, val pages: Int)
 data class Profile(val user: User, val intro: String, val gender: Int, val following: Int, val fans: Int, val threads: Int, val followed: Boolean, val forums: List<Pair<String, String>> = emptyList(), val forumsPrivate: Boolean = false)
 data class Account(val uid: String, val name: String, val bduss: String, val stoken: String, val tbs: String, val portrait: String = "") {
@@ -74,15 +74,19 @@ object Policy {
 
 fun JSONArray.objects(): List<JSONObject> = (0 until length()).mapNotNull { optJSONObject(it) }
 fun JSONObject.text(vararg keys: String): String = keys.firstNotNullOfOrNull { key -> opt(key)?.takeUnless { it == JSONObject.NULL }?.toString()?.takeIf(String::isNotBlank) }.orEmpty()
-fun Thread.json() = JSONObject().put("id", id).put("title", title).put("forum", forum).put("author", JSONObject().put("id", author.id).put("name", author.name).put("portrait", author.portrait)).put("summary", summary).put("replies", replies).put("previews", JSONArray(previews))
+fun Thread.json() = JSONObject().put("id", id).put("title", title).put("forum", forum).put("author", JSONObject().put("id", author.id).put("name", author.name).put("portrait", author.portrait)).put("summary", summary).put("replies", replies).put("previews", JSONArray(previews)).put("likes", likes ?: JSONObject.NULL).put("forum-avatar", forumAvatar).put("timestamp", timestamp).put("collected", collected)
 fun threadFromJson(j: JSONObject): Thread {
     val u = j.optJSONObject("author") ?: JSONObject()
-    return Thread(j.getString("id"), j.getString("title"), j.optString("forum"), User(u.optString("id"), u.optString("name", "贴吧用户"), u.optString("portrait")), j.optString("summary"), j.optInt("replies"), j.optJSONArray("previews")?.let { a -> (0 until a.length()).map { a.optString(it) }.mapNotNull(Policy::mediaUrl).take(9) }.orEmpty())
+    return Thread(j.getString("id"), j.getString("title"), j.optString("forum"), User(u.optString("id"), u.optString("name", "贴吧用户"), u.optString("portrait")), j.optString("summary"), j.optInt("replies"), j.optJSONArray("previews")?.let { a -> (0 until a.length()).map { a.optString(it) }.mapNotNull(Policy::mediaUrl).take(9) }.orEmpty(), likes = if (j.isNull("likes")) null else j.optLong("likes").coerceAtLeast(0), forumAvatar = j.optString("forum-avatar"), timestamp = j.optLong("timestamp"), collected = j.optBoolean("collected"))
 }
 
-fun Post.json(): JSONObject = JSONObject().put("id", id).put("floor", floor).put("name", author.name).put("author-id", author.id).put("portrait", author.portrait).put("sub-count", subCount)
+fun Post.json(): JSONObject = JSONObject().put("id", id).put("floor", floor).put("name", author.name).put("author-id", author.id).put("portrait", author.portrait).put("sub-count", subCount).put("liked", liked).put("timestamp", timestamp).put("ip-address", ipAddress).put("likes", likes ?: JSONObject.NULL).put("author-level", authorLevel).put("author-level-name", authorLevelName)
     .put("blocks", JSONArray().apply { blocks.forEach { put(JSONObject().put("type", it.type).put("text", it.text).put("url", it.url).put("local", it.localFile)) } })
     .put("children", JSONArray().apply { children.forEach { put(it.json()) } })
-fun postFromJson(j: JSONObject): Post = Post(j.getString("id"), j.optInt("floor"), User(j.optString("author-id"), j.optString("name"), j.optString("portrait")), j.getJSONArray("blocks").objects().map { Block(it.getInt("type"), it.optString("text"), it.optString("url"), it.optString("local")) }, j.optInt("sub-count"), children = j.optJSONArray("children")?.objects()?.map { child ->
-    Post(child.getString("id"), child.optInt("floor"), User(child.optString("author-id"), child.optString("name")), child.getJSONArray("blocks").objects().map { Block(it.getInt("type"), it.optString("text"), it.optString("url"), it.optString("local")) })
-}.orEmpty())
+private fun postRowFromJson(j: JSONObject): Post = Post(
+    j.getString("id"), j.optInt("floor"), User(j.optString("author-id"), j.optString("name"), j.optString("portrait")),
+    j.getJSONArray("blocks").objects().map { Block(it.getInt("type"), it.optString("text"), it.optString("url"), it.optString("local")) },
+    j.optInt("sub-count"), j.optBoolean("liked"), timestamp = j.optLong("timestamp"), ipAddress = j.optString("ip-address"),
+    likes = if (j.isNull("likes")) null else j.optLong("likes").coerceAtLeast(0), authorLevel = j.optInt("author-level").coerceAtLeast(0), authorLevelName = j.optString("author-level-name")
+)
+fun postFromJson(j: JSONObject): Post = postRowFromJson(j).copy(children = j.optJSONArray("children")?.objects()?.map(::postRowFromJson).orEmpty())

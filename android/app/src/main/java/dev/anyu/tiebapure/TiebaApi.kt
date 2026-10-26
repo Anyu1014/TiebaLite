@@ -18,6 +18,8 @@ import tieba.Personalized.*
 import tieba.ThreadInfoOuterClass.ThreadInfo
 import tieba.UserOuterClass as UserProto
 import tieba.PbContentOuterClass.PbContent
+import tieba.PostOuterClass as PostProto
+import tieba.SubPostListOuterClass.SubPostList
 import tieba.pbPage.PbPageRequestOuterClass.*
 import tieba.pbPage.PbPageResponseOuterClass.PbPageResponse
 import tieba.pbFloor.PbFloorRequestOuterClass.*
@@ -104,12 +106,24 @@ class TiebaApi(private val clientId: String, private val screenWidth: Int = 1080
         j.optJSONObject("error")?.let { validate(it.optInt("errno", 0), it.optString("errmsg")) }
     }
     private fun user(u: UserProto.User) = User(u.id.toString(), u.nameShow.ifBlank { u.name }.ifBlank { "贴吧用户" }, u.portrait)
-    private fun thread(t: ThreadInfo): Thread = Thread((if (t.id != 0L) t.id else t.threadId).toString(), t.title, t.forumName.ifBlank { t.forumInfo.name }, user(t.author), t.getAbstractList().joinToString("") { it.text }, t.replyNum, t.mediaList.mapNotNull { Policy.mediaUrl(it.srcPic.ifBlank { it.bigPic }.replaceFirst("http://", "https://")) }.take(9))
+    private fun thread(t: ThreadInfo): Thread = Thread((if (t.id != 0L) t.id else t.threadId).toString(), t.title, t.forumName.ifBlank { t.forumInfo.name }, user(t.author), t.getAbstractList().joinToString("") { it.text }, t.replyNum, t.mediaList.mapNotNull { Policy.mediaUrl(it.srcPic.ifBlank { it.bigPic }.replaceFirst("http://", "https://")) }.take(9), likes = (if (t.hasAgree()) t.agree.agreeNum else t.agreeNum.toLong()).coerceAtLeast(0), forumAvatar = t.forumInfo.avatar, timestamp = t.lastTimeInt.toLong().takeIf { it > 0 } ?: t.createTime.toLong(), collected = t.collectStatus == 1)
     private fun content(list: List<PbContent>): List<Block> = list.map { b ->
         if (b.type == 4 && b.uid > 0) return@map Block(4, b.text, "user:${b.uid}")
         if (b.type == 1) return@map Block(1, b.text, Policy.webpage(b.link).orEmpty())
         val raw = when (b.type) { 2 -> b.text.takeIf { it.matches(Regex("image_emoticon[1-9][0-9]{0,2}")) }?.let { "https://tb2.bdstatic.com/tb/editor/images/client/$it.png" }.orEmpty(); 3, 20 -> b.originSrc.ifBlank { b.bigCdnSrc }.ifBlank { b.cdnSrc }.ifBlank { b.bigSrc }.ifBlank { b.src }; 5 -> b.link.ifBlank { b.src }; 10 -> Policy.voice(b.voiceMD5).orEmpty(); else -> b.link }
         Block(b.type, b.text.ifBlank { if (b.type == 2) "[表情]" else "" }, Policy.mediaUrl(raw.replaceFirst("http://", "https://")).orEmpty())
+    }
+    private fun subpost(p: SubPostList): Post = Post(
+        java.lang.Long.toUnsignedString(p.id), p.floor, user(p.author), content(p.contentList),
+        liked = p.agree.hasAgree != 0, timestamp = Integer.toUnsignedLong(p.time), ipAddress = p.author.ipAddress,
+        likes = if (p.hasAgree()) p.agree.agreeNum.coerceAtLeast(0) else null, authorLevel = p.author.levelId.coerceAtLeast(0), authorLevelName = p.author.levelName
+    )
+    internal fun post(p: PostProto.Post, users: Map<Long, UserProto.User> = emptyMap()): Post {
+        val listed = users[p.authorId] ?: users[p.author.id]
+        val author = if (p.hasAuthor()) listed?.toBuilder()?.mergeFrom(p.author)?.build() ?: p.author else listed ?: UserProto.User.getDefaultInstance()
+        return Post(java.lang.Long.toUnsignedString(p.id), p.floor, user(author), content(p.contentList), p.subPostNumber, p.agree.hasAgree != 0,
+            children = p.subPostList.subPostListList.take(3).map(::subpost), timestamp = Integer.toUnsignedLong(p.time), ipAddress = author.ipAddress,
+            likes = if (p.hasAgree()) p.agree.agreeNum.coerceAtLeast(0) else null, authorLevel = author.levelId.coerceAtLeast(0), authorLevelName = author.levelName)
     }
     suspend fun home(account: Account?, page: Int): List<Thread> {
         require(page > 0)
@@ -131,8 +145,8 @@ class TiebaApi(private val clientId: String, private val screenWidth: Int = 1080
         val abstracts = j.optJSONArray("abstract")?.objects()?.joinToString("") { it.optString("text") }.orEmpty()
         return Thread(j.text("id", "tid", "thread_id"), j.text("title", "thread_title"), forum.ifBlank { j.text("forum_name", "fname") }, User(author.text("id", "uid"), author.text("name_show", "name", "nick").ifBlank { "贴吧用户" }, author.optString("portrait")), abstracts, j.optInt("reply_num"))
     }
-    suspend fun thread(id: String, page: Int, account: Account?, descending: Boolean = false, onlyAuthor: Boolean = false, postId: String? = null): ThreadPage {
-        val data = PbPageRequestData.newBuilder().setCommon(common(account)).setKz(Policy.signedId(id)).setPn(page).setR(if (descending) 1 else 0).setLz(if (onlyAuthor) 1 else 0).setWithFloor(1).setFloorRn(4).setFloorSortType(1).setQType(2).setRn(15).setSourceType(2).setScrW(screenWidth).setScrH(screenHeight).setScrDip(screenScale)
+    suspend fun thread(id: String, page: Int, account: Account?, descending: Boolean = false, onlyAuthor: Boolean = false, postId: String? = null, hot: Boolean = false): ThreadPage {
+        val data = PbPageRequestData.newBuilder().setCommon(common(account)).setKz(Policy.signedId(id)).setPn(page).setR(if (hot) 2 else if (descending) 1 else 0).setLz(if (onlyAuthor) 1 else 0).setWithFloor(1).setFloorRn(4).setFloorSortType(1).setQType(2).setRn(15).setSourceType(2).setScrW(screenWidth).setScrH(screenHeight).setScrDip(screenScale)
         if (postId != null && page <= 1) data.setPid(Policy.signedId(postId)).setPn(0)
         val r = PbPageResponse.parseFrom(protobuf("$base/c/f/pb/page?cmd=302001&format=protobuf", PbPageRequest.newBuilder().setData(data).build(), account, true))
         validate(r.error.errorCode, r.error.userMsg.ifBlank { r.error.errorMsg }); check(r.hasData()) { "未返回帖子内容" }
@@ -140,14 +154,14 @@ class TiebaApi(private val clientId: String, private val screenWidth: Int = 1080
         val users = d.userListList.associateBy { it.id }
         val rawPosts = d.postListList.toMutableList()
         if (d.hasFirstFloorPost() && d.firstFloorPost.id != 0L && rawPosts.none { it.id == d.firstFloorPost.id }) rawPosts.add(0, d.firstFloorPost)
-        val posts = rawPosts.filter { !it.hasAdvertisement() }.map { p -> Post(java.lang.Long.toUnsignedString(p.id), p.floor, user(if (p.hasAuthor()) p.author else users[p.authorId] ?: UserProto.User.getDefaultInstance()), content(p.contentList), p.subPostNumber, p.agree.hasAgree != 0) }
-        return ThreadPage(thread(d.thread).copy(forum = d.forum.name), d.forum.id.toString(), posts, d.page.currentPage.coerceAtLeast(1), d.page.totalPage.coerceAtLeast(1))
+        val posts = rawPosts.filter { !it.hasAdvertisement() }.map { post(it, users) }
+        return ThreadPage(thread(d.thread).copy(forum = d.forum.name, forumAvatar = d.forum.avatar.ifBlank { d.thread.forumInfo.avatar }), d.forum.id.toString(), posts, d.page.currentPage.coerceAtLeast(1), d.page.totalPage.coerceAtLeast(1))
     }
     suspend fun subposts(tid: String, pid: String, fid: String, page: Int, account: Account?): List<Post> {
         val d = PbFloorRequestData.newBuilder().setCommon(common(account)).setKz(Policy.signedId(tid)).setPid(Policy.signedId(pid)).setForumId(Policy.signedId(fid)).setPn(page).setScrW(screenWidth).setScrH(screenHeight).setScrDip(screenScale)
         val r = PbFloorResponse.parseFrom(protobuf("$base/c/f/pb/floor?cmd=302002&format=protobuf", PbFloorRequest.newBuilder().setData(d).build(), account, false))
         validate(r.error.errorCode, r.error.userMsg.ifBlank { r.error.errorMsg })
-        return r.data.subpostListList.map { Post(java.lang.Long.toUnsignedString(it.id), it.floor, user(it.author), content(it.contentList)) }
+        return r.data.subpostListList.map(::subpost)
     }
     suspend fun search(keyword: String, page: Int, forum: String = ""): List<Thread> {
         require(keyword.isNotBlank() && keyword.length <= 500 && page > 0)
