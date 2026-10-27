@@ -10,7 +10,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.ThumbUp
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
@@ -26,17 +26,27 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.semantics.*
 import coil.compose.AsyncImage
+import androidx.compose.ui.platform.testTag
 import org.json.JSONObject
 
 @Composable fun IOSAvatar(name: String, portrait: String, modifier: Modifier = Modifier, diameter: Dp = 32.dp) {
     val url = Policy.avatar(portrait)
-    Box(modifier.size(diameter).clip(CircleShape).background(IOSLayout.blue.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
-        if (url != null) AsyncImage(url, null, Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
-        else Text(name.take(1), color = IOSLayout.blue, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+    var loaded by remember(url) { mutableStateOf(false) }
+    val label = name.trim().ifBlank { "贴" }
+    Box(modifier.size(diameter).clip(CircleShape).background(IOSLayout.blue.copy(alpha = 0.12f)).testTag(if (loaded) "avatar-loaded" else "avatar-fallback"), contentAlignment = Alignment.Center) {
+        if (!loaded) Text(String(Character.toChars(label.codePointAt(0))), color = IOSLayout.blue, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+        if (url != null) AsyncImage(url, null, Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop, onSuccess = { loaded = true }, onError = { loaded = false })
     }
 }
 
-@Composable fun ThreadRow(thread: Thread, size: Float, loadMedia: Boolean, homeFeed: Boolean = false, onForum: (() -> Unit)? = null, onUser: (() -> Unit)? = null, onBlock: (() -> Unit)? = null, click: () -> Unit) {
+@Composable fun ForumAvatar(vm: AppViewModel, name: String, portrait: String = "", modifier: Modifier = Modifier, diameter: Dp = 32.dp) {
+    val known = Policy.avatar(portrait)
+    val avatar = known ?: vm.forumAvatars[name].orEmpty()
+    LaunchedEffect(name, known) { if (known == null) vm.ensureForumAvatar(name) }
+    IOSAvatar(name, avatar, modifier, diameter)
+}
+
+@Composable fun ThreadRow(vm: AppViewModel, thread: Thread, size: Float, loadMedia: Boolean, homeFeed: Boolean = false, onForum: (() -> Unit)? = null, onUser: (() -> Unit)? = null, onBlock: (() -> Unit)? = null, click: () -> Unit) {
     var menu by remember(thread.id) { mutableStateOf(false) }
     val surface = MaterialTheme.colorScheme.surface
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
@@ -44,7 +54,7 @@ import org.json.JSONObject
     Column(Modifier.fillMaxWidth().then(if (homeFeed) Modifier.padding(horizontal = IOSLayout.feedInset, vertical = 6.dp) else Modifier).clip(RoundedCornerShape(if (homeFeed) IOSLayout.cardRadius else 0.dp)).background(surface).clickable(onClick = click).padding(horizontal = IOSLayout.cardInset, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             val name = thread.forum.takeIf { it.isNotBlank() }?.let { if (it.endsWith("吧")) it else it + "吧" } ?: thread.author.name
-            Box(Modifier.size(44.dp).clickable(enabled = onForum != null, onClick = { onForum?.invoke() }), contentAlignment = Alignment.Center) { IOSAvatar(name, thread.forumAvatar.ifBlank { thread.author.portrait }) }
+            Box(Modifier.size(44.dp).clickable(enabled = onForum != null, onClick = { onForum?.invoke() }), contentAlignment = Alignment.Center) { if (thread.forum.isNotBlank()) ForumAvatar(vm, thread.forum, thread.forumAvatar) else IOSAvatar(name, thread.author.portrait) }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(name, fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.clickable(enabled = onForum != null, onClick = { onForum?.invoke() }))
@@ -55,13 +65,13 @@ import org.json.JSONObject
                 DropdownMenu(menu, { menu = false }) { DropdownMenuItem(text = { Text("屏蔽${thread.forum}吧") }, onClick = { menu = false; onBlock() }) }
             }
         }
-        if (thread.title.isNotBlank()) Text(thread.title, fontSize = size.sp, lineHeight = (size * 1.35f).sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        if (thread.summary.isNotBlank()) Text(thread.summary, fontSize = size.sp, lineHeight = (size * 1.4f).sp, maxLines = 2, overflow = TextOverflow.Ellipsis, color = secondary)
+        if (thread.title.isNotBlank()) NativeEmoticonText(TiebaEmoticon.parts(thread.title), fontSize = size.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
+        if (thread.summary.isNotBlank()) NativeEmoticonText(TiebaEmoticon.parts(thread.summary), fontSize = size.sp, maxLines = 2, color = secondary)
         if (loadMedia && thread.previews.isNotEmpty()) BoxWithConstraints {
             val single = thread.previews.size == 1
             val height = maxWidth / if (single) 2 else 3
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                thread.previews.take(3).forEach { url -> Box(Modifier.weight(1f).height(height).clip(RoundedCornerShape(8.dp))) {
+                thread.previews.take(3).forEach { url -> Box(Modifier.weight(1f).height(height).clip(RoundedCornerShape(IOSLayout.innerRadius))) {
                     AsyncImage(url, "帖子预览图", Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
                 } }
             }
@@ -93,7 +103,7 @@ import org.json.JSONObject
 }
 
 @Composable fun IOSGroup(content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.padding(horizontal = 20.dp).fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surface), content = content)
+    Column(Modifier.padding(horizontal = 20.dp).fillMaxWidth().clip(RoundedCornerShape(IOSLayout.groupRadius)).background(MaterialTheme.colorScheme.surface), content = content)
 }
 
 @Composable fun IOSRow(title: String, icon: ImageVector, onClick: () -> Unit) {
@@ -110,8 +120,8 @@ import org.json.JSONObject
         item { GroupHeader("账号") }
         item { IOSGroup {
             if (vm.account == null) {
-                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Info, null, tint = IOSLayout.blue); Spacer(Modifier.width(10.dp)); Text("未登录也可以浏览公开帖子", fontSize = 17.sp) }
-                IOSRow("手机号验证码登录", Icons.Default.Phone, onAccount)
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Outlined.Info, null, tint = IOSLayout.blue); Spacer(Modifier.width(10.dp)); Text("未登录也可以浏览公开帖子", fontSize = 17.sp) }
+                IOSRow("手机号验证码登录", Icons.Outlined.Phone, onAccount)
             } else {
                 val account = vm.account!!
                 Row(Modifier.fillMaxWidth().clickable { vm.navigate(Route("profile", account.uid, account.name)) }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -120,20 +130,20 @@ import org.json.JSONObject
                     Column(Modifier.weight(1f)) { Text(account.name, fontSize = 17.sp, fontWeight = FontWeight.SemiBold); Text("UID ${account.uid}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp) }
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(17.dp))
                 }
-                IOSRow("消息", Icons.Default.Notifications) { vm.navigate(Route("messages")) }
-                IOSRow("关注的用户", Icons.Default.Person) { vm.navigate(Route("following", vm.account!!.uid)) }
-                IOSRow("关注的吧", Icons.Default.Star) { vm.navigate(Route("forums"), root = true) }
+                IOSRow("消息", Icons.Outlined.Notifications) { vm.navigate(Route("messages")) }
+                IOSRow("关注的用户", Icons.Outlined.Person) { vm.navigate(Route("following", vm.account!!.uid)) }
+                IOSRow("关注的吧", TiebaIcons.Star) { vm.navigate(Route("forums"), root = true) }
             }
         } }
         item { GroupHeader("浏览") }
         item { IOSGroup {
-            IOSRow("帖子收藏", Icons.Default.Star) { vm.navigate(Route("favorites")) }
-            IOSRow("浏览历史", Icons.Default.DateRange) { vm.navigate(Route("history")) }
+            IOSRow("帖子收藏", TiebaIcons.Star) { vm.navigate(Route("favorites")) }
+            IOSRow("浏览历史", Icons.Outlined.DateRange) { vm.navigate(Route("history")) }
         } }
         item { GroupHeader("应用") }
         item { IOSGroup {
-            IOSRow("设置", Icons.Default.Settings) { vm.navigate(Route("settings")) }
-            IOSRow("关于 TiebaLite", Icons.Default.Info) { vm.navigate(Route("about")) }
+            IOSRow("设置", Icons.Outlined.Settings) { vm.navigate(Route("settings")) }
+            IOSRow("关于 TiebaLite", Icons.Outlined.Info) { vm.navigate(Route("about")) }
         } }
     }
 }
@@ -143,7 +153,7 @@ import org.json.JSONObject
     var managing by remember { mutableStateOf(false) }
     var clearRecent by remember { mutableStateOf(false) }
     var revision by remember { mutableIntStateOf(0) }
-    val recent = remember(vm.route, vm.data, revision) { vm.store.list("forum").mapNotNull { it.second.optString("name").takeIf(String::isNotBlank) }.distinct().take(9) }
+    val recent = remember(vm.route, vm.data, revision) { vm.store.list("forum").map { forumEntry(it.second, it.first) }.filter { it.name.isNotBlank() }.distinctBy { it.name }.take(9) }
     fun open() { if (name.isNotBlank()) vm.navigate(Route("forum", name.trim().removeSuffix("吧"))) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = padding) {
         item { GroupHeader("打开贴吧") }
@@ -156,23 +166,23 @@ import org.json.JSONObject
                 if (managing) TextButton(onClick = { clearRecent = true }) { Text("清空", fontSize = 13.sp) }
                 TextButton(onClick = { managing = !managing }) { Text(if (managing) "完成" else "管理", fontSize = 13.sp) }
             } }
-            item { ForumGrid(recent.map { "" to it }, onRemove = if (managing) { { forum -> runCatching { vm.store.remove("forum", forum); revision++ }.onFailure { vm.report("最近浏览未能更新") } } } else null) { vm.navigate(Route("forum", it)) } }
+            item { ForumGrid(vm, recent, onRemove = if (managing) { { forum -> runCatching { vm.store.remove("forum", forum); revision++ }.onFailure { vm.report("最近浏览未能更新") } } } else null) { vm.navigate(Route("forum", it)) } }
         }
         item { GroupHeader("关注贴吧") { if (vm.account != null) TextButton(onClick = { vm.signAll() }) { Text("一键签到", fontSize = 13.sp) } } }
         if (vm.account == null || vm.data.forums.isEmpty()) item { IOSGroup { Text(if (vm.account == null) "登录后显示关注的贴吧" else "还没有关注的贴吧", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) } }
-        else item { ForumGrid(vm.data.forums, onSign = { id, name -> vm.action { a -> vm.api.signForum(a, id, name) } }) { vm.navigate(Route("forum", it)) } }
+        else item { ForumGrid(vm, vm.data.forums, onSign = { id, name -> vm.action { a -> vm.api.signForum(a, id, name) } }) { vm.navigate(Route("forum", it)) } }
     }
     if (clearRecent) AlertDialog(onDismissRequest = { clearRecent = false }, title = { Text("清空最近浏览的贴吧？") }, text = { Text("只会清除本机记录，不影响你关注的贴吧。") }, confirmButton = { TextButton(onClick = { clearRecent = false; runCatching { vm.store.clear("forum"); revision++ }.onFailure { vm.report("最近浏览未能更新") } }) { Text("清空") } }, dismissButton = { TextButton(onClick = { clearRecent = false }) { Text("取消") } })
 }
 
-@Composable private fun ForumGrid(forums: List<Pair<String, String>>, onSign: ((String, String) -> Unit)? = null, onRemove: ((String) -> Unit)? = null, onOpen: (String) -> Unit) {
+@Composable private fun ForumGrid(vm: AppViewModel, forums: List<ForumEntry>, onSign: ((String, String) -> Unit)? = null, onRemove: ((String) -> Unit)? = null, onOpen: (String) -> Unit) {
     var signingTarget by remember { mutableStateOf<Pair<String, String>?>(null) }
     IOSGroup { BoxWithConstraints(Modifier.padding(horizontal = 16.dp, vertical = 16.dp)) {
         val columns = ((maxWidth + 12.dp) / 88.dp).toInt().coerceAtLeast(1)
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         forums.chunked(columns).forEach { row -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            row.forEach { (id, name) -> Column(Modifier.weight(1f).combinedClickable(onClick = { onOpen(name) }, onLongClickLabel = "贴吧签到", onLongClick = if (onSign != null && id.toLongOrNull()?.let { it > 0 } == true) { { signingTarget = id to name } } else null), horizontalAlignment = Alignment.CenterHorizontally) {
-                Box { IOSAvatar(name, "", Modifier.padding(bottom = 8.dp), diameter = 52.dp); if (onRemove != null) IconButton(onClick = { onRemove(name) }, modifier = Modifier.align(Alignment.TopEnd).size(28.dp).background(MaterialTheme.colorScheme.surface, CircleShape)) { Icon(Icons.Default.Close, "移除$name", modifier = Modifier.size(14.dp)) } }
+            row.forEach { (id, name, avatar) -> Column(Modifier.weight(1f).combinedClickable(onClick = { onOpen(name) }, onLongClickLabel = "贴吧签到", onLongClick = if (onSign != null && id.toLongOrNull()?.let { it > 0 } == true) { { signingTarget = id to name } } else null), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box { ForumAvatar(vm, name, avatar, Modifier.padding(bottom = 8.dp), diameter = 52.dp); if (onRemove != null) IconButton(onClick = { onRemove(name) }, modifier = Modifier.align(Alignment.TopEnd).size(28.dp).background(MaterialTheme.colorScheme.surface, CircleShape)) { Icon(Icons.Default.Close, "移除$name", modifier = Modifier.size(14.dp)) } }
                 Text(if (name.endsWith("吧")) name else name + "吧", fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 DropdownMenu(expanded = signingTarget == (id to name), onDismissRequest = { signingTarget = null }) { DropdownMenuItem(text = { Text("签到") }, onClick = { signingTarget = null; onSign?.invoke(id, name) }) }
             } }
@@ -182,17 +192,9 @@ import org.json.JSONObject
     } }
 }
 
-@Composable fun IOSPostAuthor(user: User, floor: Int, onOpen: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        IOSAvatar(user.name, user.portrait); Spacer(Modifier.width(12.dp))
-        Text(user.name, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text("${floor}楼", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Composable fun IOSCollectionStar(selected: Boolean) {
+@Composable fun IOSCollectionStar(selected: Boolean, diameter: androidx.compose.ui.unit.Dp = 22.dp) {
     val color = MaterialTheme.colorScheme.onSurface
-    Canvas(Modifier.size(22.dp).semantics { contentDescription = if (selected) "取消收藏帖子" else "收藏帖子" }) {
+    Canvas(Modifier.size(diameter).semantics { contentDescription = if (selected) "取消收藏帖子" else "收藏帖子" }) {
         val path = Path()
         for (i in 0 until 10) {
             val radius = size.minDimension * if (i % 2 == 0) 0.46f else 0.21f

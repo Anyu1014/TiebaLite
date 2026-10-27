@@ -13,6 +13,7 @@ struct ContentComposerView: View {
     private let onSent: (ContentSubmissionReceipt) -> Void
 
     @State private var title: String
+    @State private var bodySelection: NSRange
     @State private var bodyText: String
     @State private var attachments: [ContentSubmissionImage]
     @State private var savedSnapshot: ContentComposerSnapshot
@@ -28,6 +29,7 @@ struct ContentComposerView: View {
     @StateObject private var dismissalGate = ContentComposerDismissalGate()
 
     @FocusState private var focusedField: ContentComposerField?
+    @State private var bodyIsFocused = false
     @ScaledMetric(relativeTo: .body) private var editorMinimumHeight = 180
 
     init(
@@ -50,6 +52,7 @@ struct ContentComposerView: View {
         ))
         _title = State(initialValue: initialTitle)
         _bodyText = State(initialValue: initialBody)
+        _bodySelection = State(initialValue: NSRange(location: (initialBody as NSString).length, length: 0))
         _attachments = State(initialValue: initialAttachments)
         _savedSnapshot = State(initialValue: ContentComposerSnapshot(
             title: initialTitle,
@@ -103,10 +106,15 @@ struct ContentComposerView: View {
                 .background(.bar)
             }
             .compatibleOnChange(of: focusedField) { _, field in
+                if field == .title { bodyIsFocused = false }
                 guard field != nil, showsEmoticons else { return }
                 withAnimation(.easeInOut(duration: 0.2)) {
                     showsEmoticons = false
                 }
+            }
+            .compatibleOnChange(of: bodyIsFocused) { _, focused in
+                guard focused, showsEmoticons else { return }
+                withAnimation(.easeInOut(duration: 0.2)) { showsEmoticons = false }
             }
         }
         .confirmationDialog(
@@ -158,7 +166,7 @@ struct ContentComposerView: View {
                 .lineLimit(1...3)
                 .focused($focusedField, equals: .title)
                 .submitLabel(.next)
-                .onSubmit { focusedField = .body }
+                .onSubmit { focusedField = nil; bodyIsFocused = true }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 11)
                 .frame(minHeight: 44)
@@ -193,10 +201,12 @@ struct ContentComposerView: View {
                         .allowsHitTesting(false)
                 }
 
-                TextEditor(text: $bodyText)
-                    .font(.body)
-                    .focused($focusedField, equals: .body)
-                    .scrollContentBackground(.hidden)
+                NativeEmoticonEditor(text: $bodyText, selection: $bodySelection, isFocused: bodyIsFocused, onFocus: {
+                    if !bodyIsFocused { bodyIsFocused = true }
+                    if focusedField != nil { focusedField = nil }
+                }, onBlur: {
+                    if bodyIsFocused { bodyIsFocused = false }
+                })
                     .padding(.horizontal, 8)
                     .padding(.vertical, 6)
                     .frame(minHeight: max(editorMinimumHeight, 132))
@@ -275,10 +285,11 @@ struct ContentComposerView: View {
                 ) {
                     ForEach(ContentComposerEmoticonCatalog.entries) { entry in
                         ContentComposerEmoticonButton(entry: entry) {
-                            bodyText = ContentComposerPolicy.appendingEmoticon(
-                                entry.token,
-                                to: bodyText
-                            )
+                            let source = bodyText as NSString
+                            let start = min(bodySelection.location, source.length)
+                            let length = min(bodySelection.length, source.length - start)
+                            bodyText = source.replacingCharacters(in: NSRange(location: start, length: length), with: entry.token)
+                            bodySelection = NSRange(location: start + (entry.token as NSString).length, length: 0)
                         }
                     }
                 }
@@ -422,6 +433,7 @@ struct ContentComposerView: View {
                     showsEmoticons = false
                 } else {
                     focusedField = nil
+                    bodyIsFocused = false
                     showsEmoticons = true
                 }
             }
@@ -513,6 +525,7 @@ struct ContentComposerView: View {
         }
 
         focusedField = nil
+        bodyIsFocused = false
         draftStatusMessage = nil
         submissionState = .submitting
         Task {
@@ -542,6 +555,7 @@ struct ContentComposerView: View {
             return
         }
         focusedField = nil
+        bodyIsFocused = false
         showsUnsavedChangesConfirmation = true
     }
 
@@ -1015,7 +1029,6 @@ enum ContentSubmissionImageSanitizer {
 
 private enum ContentComposerField: Hashable {
     case title
-    case body
 }
 
 private enum ContentComposerSubmissionState: Equatable {
@@ -1086,8 +1099,6 @@ private struct ContentComposerEmoticonButton: View {
                 }
             }
             .frame(width: 44, height: 44)
-            .background(Color(uiColor: .secondarySystemGroupedBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

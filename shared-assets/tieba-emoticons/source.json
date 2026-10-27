@@ -1,0 +1,300 @@
+{
+  "source": "百度贴吧原生表情，保留原始文件，仅用于兼容贴吧内容",
+  "images": [
+    {
+      "file": "image_emoticon1.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon1.png",
+      "sha256": "ce2826bf32e2006032c1f4b5c7a1bbf835adafed96bc3b8bf5d29e26ef11b17a"
+    },
+    {
+      "file": "image_emoticon2.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon2.png",
+      "sha256": "818878b4131fab03addce06e6f006bbfd136708acc12b0832f1f5820e73aaadf"
+    },
+    {
+      "file": "image_emoticon3.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon3.png",
+      "sha256": "81ad89872eb17e43fb7c8566ef899b349f32926ced5eae2bc844eff255e61774"
+    },
+    {
+      "file": "image_emoticon4.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon4.png",
+      "sha256": "8d12b41b858a92e9c4be370eaea50cb87ecdcdcd600d813ee35aea3d90e061d4"
+    },
+    {
+      "file": "image_emoticon5.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon5.png",
+      "sha256": "dc16fb299bc2a391b8261ef5ebb86a004e2401d22c781f19f6e90682b15f0b42"
+    },
+    {
+      "file": "image_emoticon6.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon6.png",
+      "sha256": "2f25354f89fe33fe24ac399387d9c2da898e803bd0fd4e26f5ff81a18496f80a"
+    },
+    {
+      "file": "image_emoticon7.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon7.png",
+      "sha256": "adc883ae8c49e48e6e9ec61b774b8e13dd9b0621b4ae97539e06ed568c668b16"
+    },
+    {
+      "file": "image_emoticon8.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon8.png",
+      "sha256": "517199c8ce2370226099c802e47a757c8c001617d4dfb979190cd84b5b7b7ceb"
+    },
+    {
+      "file": "image_emoticon9.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon9.png",
+      "sha256": "96d5ef462a5245d350811e1ea5304f11cd8cf09e6e4438f5781c4192b780c480"
+    },
+    {
+      "file": "image_emoticon10.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon10.png",
+      "sha256": "81a1ee8495c6d5da63de39f0216591761fd8fc7e57b6717113d0977f35008018"
+    },
+    {
+      "file": "image_emoticon11.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon11.png",
+      "sha256": "2cfe93258c06aa97c35f80d77582da463384fe1919f1c6be57908c66b3e581be"
+    },
+    {
+      "file": "image_emoticon12.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon12.png",
+      "sha256": "c8080afb6b7775038736aadece08e7b5a1ef868f5ce70fbb45640ef40444e33b"
+    },
+    {
+      "file": "image_emoticon13.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon13.png",
+      "sha256": "d02522f74e06d123a2b269e640860e2300b40162d8821b7c71bf43a95ab1db1c"
+    },
+    {
+      "file": "image_emoticon14.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon14.png",
+      "sha256": "e29a8dd925bb88a1f458d2d6821a7b67023b0c5c7f80cd8ac283371198ce40ea"
+    },
+    {
+      "file": "image_emoticon15.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon15.png",
+      "sha256": "e850c055f1ea8f433148ee57f6201d1258abe727bc809e0de004949d6bd8fd72"
+    },
+    {
+      "file": "image_emoticon16.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon16.png",
+      "sha256": "f651cad5735e3abb64b274bccc296448c2914d492dcbe9ffe62767fd269ca158"
+    },
+    {
+      "file": "image_emoticon17.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon17.png",
+      "sha256": "099474ff530953494ed139b756d3fa8def1d128bb60641abc00c56521a518e38"
+    },
+    {
+      "file": "image_emoticon18.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon18.png",
+      "sha256": "f49815db8c10223cb44b9a196fd571b42b025d13f0f2d8a1916a3756f758db29"
+    },
+    {
+      "file": "image_emoticon19.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon19.png",
+      "sha256": "36b85a7e604ad147658ed446974aa50192adb87f1c5eb559f6a42fa7169038f6"
+    },
+    {
+      "file": "image_emoticon20.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon20.png",
+      "sha256": "a4c62b0c8791976ddf3dc35fa6ca58b6304c06cb72ce9d6b15e2c2757b636bab"
+    },
+    {
+      "file": "image_emoticon21.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon21.png",
+      "sha256": "7e67e986940317e00d17781a51c39ea32807b783625b48efbd183bc08e944a8f"
+    },
+    {
+      "file": "image_emoticon22.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon22.png",
+      "sha256": "7e1ea1bfa5d4c4bb11fa702c51967833180e56b5239fa474e6161886e16b71bc"
+    },
+    {
+      "file": "image_emoticon23.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon23.png",
+      "sha256": "b126b1ead8f1853d92a598e3b77a5bf44f752345276f4ec5702a0fd558a77cd0"
+    },
+    {
+      "file": "image_emoticon24.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon24.png",
+      "sha256": "ba95eb6e3558c818a0c6b8a8c2200c149e0887c9f53ea6c5abf4e5da63239843"
+    },
+    {
+      "file": "image_emoticon25.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon25.png",
+      "sha256": "682199b4cf3d0c2097bfd776da8e00800b5cce88b1dbf537c87ef4846d508be3"
+    },
+    {
+      "file": "image_emoticon26.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon26.png",
+      "sha256": "0fd5db7cb81820d0e21135e440e82b336cea3dfb63f3c9b3b800bc0a893c853a"
+    },
+    {
+      "file": "image_emoticon27.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon27.png",
+      "sha256": "82e8b6d3be80aa34f1763adc2f96062da7ae2d4d1ea201da95861af931daa6ab"
+    },
+    {
+      "file": "image_emoticon28.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon28.png",
+      "sha256": "04b01e0158e1d0dfe970d9a20fb505e7ae31c4688a78394b666de4a962af58c5"
+    },
+    {
+      "file": "image_emoticon29.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon29.png",
+      "sha256": "2451ab317bf571f326c328f3a84ba16e3217ded517f9060a188ccc361d3e93b9"
+    },
+    {
+      "file": "image_emoticon30.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon30.png",
+      "sha256": "d35c1d2531c64fdba7c2baf1ae519456a298ac6dee68cd2755c9091ce41c55f6"
+    },
+    {
+      "file": "image_emoticon31.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon31.png",
+      "sha256": "464473eae18a95d8e875639f964d0bbd7d7cda55a171bdf04a8381e514e2b7b1"
+    },
+    {
+      "file": "image_emoticon32.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon32.png",
+      "sha256": "174dbf3fa3b093971dc723438bfd9db36d4431a8b957ea7d8db0376a13c8ace5"
+    },
+    {
+      "file": "image_emoticon33.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon33.png",
+      "sha256": "c6a2a32f534a9c56b1c270cc78dd0eb0959d305f8a1ae46cfc3cbf9f66388180"
+    },
+    {
+      "file": "image_emoticon34.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon34.png",
+      "sha256": "efab4df942a1d1c879fd04ad5ec8e44992a230930230da2f80e6c74c6b8d0647"
+    },
+    {
+      "file": "image_emoticon35.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon35.png",
+      "sha256": "ec6162641c826045298d2f4f8942dad9b9c2b57eb09e3c05297feb85d89bdf08"
+    },
+    {
+      "file": "image_emoticon36.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon36.png",
+      "sha256": "4965a8b18ba60ed618458f37d203732243b236b340e013e399faf1565aca9687"
+    },
+    {
+      "file": "image_emoticon37.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon37.png",
+      "sha256": "fcdcf480419fa16f7f37ade77bb3fe9a482269a0b05f5e3d5d0384ae80c72f95"
+    },
+    {
+      "file": "image_emoticon38.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon38.png",
+      "sha256": "4b3132deb947024ed56a4e3be1f0f49039a88390696d80031cd5d30f117b1632"
+    },
+    {
+      "file": "image_emoticon39.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon39.png",
+      "sha256": "89285932d48911bec7573532b138ecda599ab6f0d0cdf2acdce9289ec6091bdc"
+    },
+    {
+      "file": "image_emoticon40.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon40.png",
+      "sha256": "ff785d606b4e4fc067ba857f98449ff1fe0c6dc391b7ebadedc8e59f6d9e2b8f"
+    },
+    {
+      "file": "image_emoticon41.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon41.png",
+      "sha256": "d426a035937d589c1b10fb57368b294f21b51db3555e89712ac5ff16e0cfc7a1"
+    },
+    {
+      "file": "image_emoticon42.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon42.png",
+      "sha256": "e9921d01d429b00604ea7997cca92a3a65e6504969f207aadc1d08d988d2fad9"
+    },
+    {
+      "file": "image_emoticon43.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon43.png",
+      "sha256": "814430f0fb4b9f1a6a955cdf5dbbfb6affe75571402ee0a3e2885bdfe484b456"
+    },
+    {
+      "file": "image_emoticon44.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon44.png",
+      "sha256": "533228df3ebc8c690adccb5f9a67fce67c9473f4740d9d26aed1ab02b2a65c41"
+    },
+    {
+      "file": "image_emoticon45.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon45.png",
+      "sha256": "fd1701f99651c23267886a80407de7f10927ab94ea5528945104e3b286c300fe"
+    },
+    {
+      "file": "image_emoticon46.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon46.png",
+      "sha256": "e660e38c3a43bbd33045a0f319b7a5dba9ae297c0d5141d2ec019c30f4efe03b"
+    },
+    {
+      "file": "image_emoticon47.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon47.png",
+      "sha256": "623ac834cdeeb3a17b8a352ec3e9a2c2c72411628212aadd180acdafbf30ea03"
+    },
+    {
+      "file": "image_emoticon48.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon48.png",
+      "sha256": "7e1edf20fa64aa7ceb592f7e7f72e6b1d47a0598a05514c306307b852b6e4563"
+    },
+    {
+      "file": "image_emoticon49.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon49.png",
+      "sha256": "0e2d2f79eefaaa90179b483c46bd6e8f6d3680a5e53d0dfb0a0c6c5bb2f44385"
+    },
+    {
+      "file": "image_emoticon50.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon50.png",
+      "sha256": "d442a75ef8e428f6f78d46e6ff5ac97adbdcee13d3879329f0cf008a74980618"
+    },
+    {
+      "file": "image_emoticon77.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon77.png",
+      "sha256": "f6603e177220c8351218b295807be37aa1a6262ad22b7e4fcd31394341156242"
+    },
+    {
+      "file": "image_emoticon78.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon78.png",
+      "sha256": "0b2b45940ed1e5672424cb70fbfc1e9c866b4b59a3acfca40bbf521a6d57a38f"
+    },
+    {
+      "file": "image_emoticon79.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon79.png",
+      "sha256": "8463f599d3e63a963d7275247d104874ed58d48f164f9692739c5831a6476ab6"
+    },
+    {
+      "file": "image_emoticon80.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon80.png",
+      "sha256": "a7b8cf343b445d5703bc0f86a4c3447888a54015caa97e70f50e0495e4733a95"
+    },
+    {
+      "file": "image_emoticon81.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon81.png",
+      "sha256": "e07642dc50f3f016f5d6386086bc15a22df2ed61c5f446c09faf2b512842c1f7"
+    },
+    {
+      "file": "image_emoticon82.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon82.png",
+      "sha256": "c49206f02d31a32c6aba8a0d874afe39055503a7f7f02c7b91b5722ebbe900d2"
+    },
+    {
+      "file": "image_emoticon83.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon83.png",
+      "sha256": "e250b4104fbc6ee284c87d160ec6ad25a758674050b6174d814e6ebcd09e2b9d"
+    },
+    {
+      "file": "image_emoticon84.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon84.png",
+      "sha256": "45ac52fa2dc714feb8f23a2ef7ef2abe28b511f6d203597cb6063adb738394bb"
+    },
+    {
+      "file": "image_emoticon89.png",
+      "url": "https://tb2.bdstatic.com/tb/editor/images/client/image_emoticon89.png",
+      "sha256": "cdad5d9b98b9a9655d5817517a7b23c343c2bd64d16cc6cff427be75d1ceadf9"
+    }
+  ]
+}

@@ -7,9 +7,9 @@ source /Users/y/toolchains/env.sh
 bash scripts/build-android.sh lintDebug assembleDebugAndroidTest
 ```
 
-Debug可安装包输出 `releases/android/TiebaLite-1.0-debug.apk`，脚本执行单测和APK签名校验。网络需要本机代理时按环境传入Gradle的http/https.proxyHost/proxyPort，不将代理凭据硬编码。
+Debug包归档到 `releases/TiebaLite-1.1-debug-<SHA前12位>/TiebaLite-1.1-debug.apk`，不替换当前Release。脚本执行单测和APK签名校验。网络需要本机代理时按环境传入Gradle的http/https.proxyHost/proxyPort，不将代理凭据硬编码。
 
-Release配置从两个环境变量读取本地密钥和密码文件，不在源码中保存密码。本次创建的私有密钥在 `.build/signing/tiebalite-release.jks`，alias `tiebalite`，密码文件同目录 `release-password.txt`；未来升级要复用这份密钥。
+Release配置从密钥和密码文件环境变量读取本地密钥和密码文件，不在源码中保存密码。本机既有私有密钥在 `.build/signing/tiebalite-release.jks`，alias `tiebalite`，密码文件同目录 `release-password.txt`；未来升级要复用这份密钥。
 
 ```sh
 TIEBALITE_ANDROID_MODE=release \
@@ -18,7 +18,9 @@ TIEBALITE_KEY_PASSWORD_FILE="$PWD/.build/signing/release-password.txt" \
 bash scripts/build-android.sh lintRelease
 ```
 
-输出 `releases/android/TiebaLite-1.0.apk`。Release未开启代码混淆；Debug和Release签名不同，不能互相直接覆盖，不能在有用户数据的设备上以卸载作为修复方法。
+输出 `lastest/TiebaLite-1.1.apk`，与当前签名IPA放在同一文件夹。内容变化时旧APK自动移至同级`releases/`，相同SHA256只保留一份，新APK不会移走当前IPA。文件存储逻辑见scripts/store-package.mjs，验证命令为`/Users/y/toolchains/bin/node --test scripts/store-package.test.mjs`。
+
+Release未开启代码混淆；Debug和Release签名不同，不能互相直接覆盖，不能在有用户数据的设备上以卸载作为修复方法。
 
 从源码包重建时，私钥不会随包提供。可先用工具箱的`keytool -genkeypair -alias tiebalite -keyalg RSA -keysize 3072 -validity 10000 -keystore /自选私有路径/release.jks`交互创建自己的密钥，再把相应密码保存到仅本人可读的文件并设置上述变量。勿覆盖已有升级签名，勿把私钥和密码发到仓库或日志。Debug重建不需要Release密钥。
 

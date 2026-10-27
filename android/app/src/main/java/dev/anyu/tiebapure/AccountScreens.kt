@@ -22,6 +22,7 @@ import org.json.JSONObject
 @Composable fun ProfileScreen(vm: AppViewModel, padding: PaddingValues = PaddingValues()) {
     val p = vm.data.profile ?: return
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp).padding(bottom = padding.calculateBottomPadding())) {
+        IOSAvatar(p.user.name, p.user.portrait, Modifier.padding(bottom = 12.dp), diameter = 72.dp)
         Text(p.user.name, style = MaterialTheme.typography.headlineSmall)
         Text(p.intro.ifBlank { "还没有简介" }, Modifier.padding(vertical = 16.dp))
         Row {
@@ -34,7 +35,11 @@ import org.json.JSONObject
         Text("关注的贴吧", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp))
         if (p.forumsPrivate) Text("用户未公开关注的贴吧", Modifier.padding(vertical = 12.dp))
         else if (p.forums.isEmpty()) Text("暂无贴吧", Modifier.padding(vertical = 12.dp))
-        else p.forums.filterNot { vm.store.blocked(Thread("", "", it.second)) }.forEach { (_, name) -> MenuRow("${name}吧") { vm.navigate(Route("forum", name)) } }
+        else p.forums.filterNot { vm.store.blocked(Thread("", "", it.second)) }.forEach { (_, name) ->
+            Row(Modifier.fillMaxWidth().clickable { vm.navigate(Route("forum", name)) }.padding(vertical = 12.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                ForumAvatar(vm, name); Spacer(Modifier.width(12.dp)); Text("${name}吧")
+            }
+        }
     }
 }
 
@@ -42,7 +47,10 @@ import org.json.JSONObject
     LazyColumn(contentPadding = PaddingValues(bottom = padding.calculateBottomPadding())) {
         if (vm.data.users.isEmpty() && !vm.loading && vm.error.isBlank()) item { EmptyMessage("暂无用户") }
         items(vm.data.users, key = { it.id }) { u ->
-            MenuRow(u.name) { vm.navigate(Route("profile", u.id, u.name)) }
+            Row(Modifier.fillMaxWidth().clickable { vm.navigate(Route("profile", u.id, u.name)) }.padding(16.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                IOSAvatar(u.name, u.portrait); Spacer(Modifier.width(12.dp)); Text(u.name, modifier = Modifier.weight(1f)); Text("›", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            HorizontalDivider(Modifier.padding(start = 60.dp))
         }
         if (vm.data.hasMore) item { AutomaticPageFooter(vm) }
     }
@@ -72,6 +80,8 @@ import org.json.JSONObject
     val draftKey = remember(account.uid, route) { account.uid + ":" + java.security.MessageDigest.getInstance("SHA-256").digest((route.id + route.extra).toByteArray()).joinToString("") { "%02x".format(it) } }
     val draft = remember(draftKey) { vm.store.get("draft", draftKey) }
     var title by remember(draftKey) { mutableStateOf(draft?.optString("title").orEmpty()) }
+    val emoticonEditor = remember(draftKey) { NativeEmoticonEditorState() }
+    var showEmoticons by remember { mutableStateOf(false) }
     var text by remember(draftKey) { mutableStateOf(draft?.optString("text").orEmpty()) }
     var images by remember(draftKey) { mutableStateOf(draft?.optJSONArray("images")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty()) }
     var confirm by remember { mutableStateOf(false) }
@@ -91,8 +101,15 @@ import org.json.JSONObject
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
         Text("${route.id}吧 · ${account.name}", style = MaterialTheme.typography.bodySmall)
         if (newThread) OutlinedTextField(value = title, onValueChange = { if (it.length <= 4096) { title = it; save() } else vm.report("标题过长") }, label = { Text("标题，最多 64 字") }, modifier = Modifier.fillMaxWidth().padding(top = 12.dp))
-        OutlinedTextField(value = text, onValueChange = { if (it.length <= 40000) { text = it; save() } else vm.report("正文过长") }, label = { Text("正文，最多 10000 字") }, modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), minLines = 8)
-        Row { listOf("[呵呵]", "[哈哈]", "[爱心]").forEach { code -> TextButton(onClick = { text += code; save() }) { Text(code) } } }
+        NativeEmoticonEditor(text, { if (it.length <= 40000) { text = it; save() } else vm.report("正文过长") }, emoticonEditor, Modifier.fillMaxWidth().padding(vertical = 12.dp))
+        TextButton(onClick = { showEmoticons = !showEmoticons }) { Text(if (showEmoticons) "收起表情" else "贴吧表情") }
+        if (showEmoticons) androidx.compose.foundation.lazy.LazyRow(Modifier.fillMaxWidth().height(52.dp)) {
+            items(TiebaEmoticon.names.entries.toList()) { (id, label) ->
+                IconButton(onClick = { emoticonEditor.view?.insertToken("#($label)") }) {
+                    coil.compose.AsyncImage("file:///android_asset/tieba-emoticons/image_emoticon$id.png", "插入$label" , Modifier.size(30.dp))
+                }
+            }
+        }
         if (!newThread) {
             OutlinedButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = images.size < 9 && !vm.submitting) { Text("选择回复图片 ${images.size}/9") }
             images.forEachIndexed { index, uri -> Row(Modifier.fillMaxWidth()) { Text("图片 ${index + 1}", Modifier.weight(1f)); TextButton(onClick = { images = images - uri; save() }) { Text("移除") } } }

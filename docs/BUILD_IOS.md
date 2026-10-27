@@ -11,7 +11,7 @@ bash scripts/build-ios.sh debug
 bash scripts/build-ios.sh ipa
 ```
 
-脚本同步 App.xcconfig 并生成 Xcode 工程；Release归档在 `.build/TiebaLite.xcarchive`，IPA在 `releases/ios/TiebaLite-1.0-unsigned.ipa`。包含主应用及Open In扩展，未签名。不能把ZIP检查、归档成功当成已可直接安装。
+脚本同步 App.xcconfig 并生成 Xcode 工程；Release归档在 `.build/TiebaLite.xcarchive`。未签名IPA保存至 `releases/TiebaLite-1.0-unsigned-<SHA前12位>/TiebaLite-1.0-unsigned.ipa`，不替换当前可安装的签名IPA。包含主应用及Open In扩展，未签名。不能把ZIP检查、归档成功当成已可直接安装。
 
 具备已安装模拟器时：
 
@@ -20,16 +20,18 @@ bash scripts/build-ios.sh ipa
 SIMULATOR_UDID='<已存在的模拟器UDID>' bash scripts/build-ios.sh test
 ```
 
-本机本轮没有任何iOS模拟器运行时。仅执行了Generic Simulator的build-for-testing，未跑XCTest/UITest。右侧iOS图为上游参考，非本版运行截图。
+本机没有iOS模拟器运行时；当前版本已在已登记iPhone运行宿主单元测试，覆盖真实UITextView、完整SwiftUI编辑页及中文输入焦点。独立UI Runner受免费签名应用数量限制，未计为通过。详见docs/releases/1.1.md。
 
-签名须同时匹配 `dev.anyu.tiebalite` 和 `dev.anyu.tiebalite.open-in`。现有本机描述文件不匹配，未自动创建Apple账号资料或上传签名请求。准备正确团队与profiles后可用Xcode配置，或：
+签名须同时匹配 `dev.anyu.tiebalite` 和 `dev.anyu.tiebalite.open-in`。本机已通过现有开发者账号的Automatic Signing为主应用和扩展签名；其他环境须使用自己的团队和匹配profiles，可用Xcode配置，或：
 
 ```sh
 DEVELOPMENT_TEAM='<Team ID>' bash scripts/build-ios.sh signed-archive
 bash scripts/build-ios.sh export '/绝对路径/ExportOptions.plist'
 ```
 
-ExportOptions须与实际开发、Ad Hoc或分发方式匹配。不得将证书私钥、密码或描述文件放进Git/源码zip。本次没有安装用户iPhone。
+签名导出先使用`.build/ios-export.*`临时目录，最终只把`TiebaLite-<版本>.ipa`存入工作区根目录下的`lastest/`，与APK放在一起。旧签名IPA自动归档到同级`releases/`，相同SHA256不重复保留，新IPA不会移走当前APK。
+
+ExportOptions须与实际开发、Ad Hoc或分发方式匹配。不得将证书私钥、密码或描述文件放进Git/源码zip。当前1.1/build67已从最终签名IPA原位安装到已登记iPhone；签名期限和验收范围见docs/releases/1.1.md。
 
 ## 1.0/build61 设备签名记录
 

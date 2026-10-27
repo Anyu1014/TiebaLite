@@ -83,24 +83,28 @@ final class ContentReplyFeatureTests: XCTestCase {
         XCTAssertTrue(challenge.message.contains("<redacted>"))
     }
 
-    func testReplySettingDefaultsOffPersistsAndRemovesDefaultOverride() throws {
+    func testReplySettingDefaultsOnPersistsDisabledOverrideAndReset() throws {
         let suiteName = "dev.infinityf4p.tiebapure.reply-settings-tests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let key = "replies-enabled"
 
         let store = ContentSubmissionSettingsStore(defaults: defaults, key: key)
-        XCTAssertFalse(store.repliesEnabled)
-        XCTAssertNil(defaults.object(forKey: key))
-
-        store.setRepliesEnabled(true)
         XCTAssertTrue(store.repliesEnabled)
-        XCTAssertEqual(defaults.object(forKey: key) as? Bool, true)
-        XCTAssertTrue(ContentSubmissionSettingsStore(defaults: defaults, key: key).repliesEnabled)
+        XCTAssertNil(defaults.object(forKey: key))
 
         store.setRepliesEnabled(false)
         XCTAssertFalse(store.repliesEnabled)
+        XCTAssertEqual(defaults.object(forKey: key) as? Bool, false)
+        XCTAssertFalse(ContentSubmissionSettingsStore(defaults: defaults, key: key).repliesEnabled)
+
+        store.setRepliesEnabled(true)
+        XCTAssertTrue(store.repliesEnabled)
         XCTAssertNil(defaults.object(forKey: key))
+        XCTAssertTrue(ContentSubmissionSettingsStore(defaults: defaults, key: key).repliesEnabled)
+        store.setRepliesEnabled(false)
+        store.reset()
+        XCTAssertTrue(store.repliesEnabled)
     }
 
     func testNewThreadAndLikeSettingsDefaultOnPersistDisabledOverridesAndReset() throws {
@@ -156,6 +160,10 @@ final class ContentReplyFeatureTests: XCTestCase {
     func testReplySettingAllowsNewThreadsButGatesEveryReplyKind() throws {
         let defaults = try scratchDefaults()
         let store = ContentSubmissionSettingsStore(defaults: defaults, key: "replies-enabled")
+        for kind in ContentSubmissionKind.allCases {
+            XCTAssertTrue(store.allowsSubmission(kind: kind))
+        }
+        store.setRepliesEnabled(false)
 
         XCTAssertTrue(store.allowsSubmission(kind: .newThread))
         XCTAssertFalse(store.allowsSubmission(kind: .threadReply))
@@ -175,6 +183,7 @@ final class ContentReplyFeatureTests: XCTestCase {
     func testCoordinatorRejectsRepliesBeforeNetworkAndObservesLiveSetting() async throws {
         let defaults = try scratchDefaults()
         let store = ContentSubmissionSettingsStore(defaults: defaults, key: "replies-enabled")
+        store.setRepliesEnabled(false)
         let api = FixtureTiebaAPI(scenario: .submissionFailure)
         let coordinator = ContentSubmissionCoordinator(
             api: api,
@@ -208,6 +217,7 @@ final class ContentReplyFeatureTests: XCTestCase {
     func testCoordinatorNeverBlocksNewThreadWhenRepliesAreDisabled() async throws {
         let defaults = try scratchDefaults()
         let store = ContentSubmissionSettingsStore(defaults: defaults, key: "replies-enabled")
+        store.setRepliesEnabled(false)
         let coordinator = ContentSubmissionCoordinator(
             api: FixtureTiebaAPI(scenario: .submissionFailure),
             allowsSubmission: { store.allowsSubmission(kind: $0) }

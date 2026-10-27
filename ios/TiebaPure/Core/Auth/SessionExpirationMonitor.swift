@@ -166,6 +166,11 @@ struct SessionMonitoringTiebaAPI: TiebaAPIService {
             try await base.deleteOwnThread(account: account, target: target)
         }
     }
+    func deleteOwnComment(account: Account, target: OwnCommentDeletionTarget) async throws {
+        try await monitored(account: account) {
+            try await base.deleteOwnComment(account: account, target: target)
+        }
+    }
 
     func setUserFollowed(
         account: Account,

@@ -80,6 +80,20 @@ class LocalStore(private val context: Context, namespace: String = "") : SQLiteO
             return directory
         } catch (e: Exception) { directory.deleteRecursively(); throw e }
     }
+    @Synchronized fun updateForumMetadata(name: String, forum: ForumEntry) {
+        val saved = header("forum", name) ?: return
+        val avatar = Policy.avatar(forum.avatar) ?: return
+        saved.put("avatar", avatar)
+        if (forum.id.toLongOrNull()?.let { it > 0 } == true) saved.put("id", forum.id)
+        require(saved.toString().toByteArray().size <= 1024 * 1024)
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            check(db.update("items", ContentValues().apply { put("data", saved.toString()) }, "kind=? AND id=?", arrayOf("forum", name)) == 1)
+            check(android.database.DatabaseUtils.longForQuery(db, "SELECT COALESCE(SUM(length(CAST(data AS BLOB))),0) FROM items", null) <= 128L * 1024 * 1024) { "本地正文达到128MB上限" }
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+    }
     @Synchronized fun remove(kind: String, id: String) { writableDatabase.delete("items", "kind=? AND id=?", arrayOf(kind, id)) }
     @Synchronized fun clear(kind: String) { writableDatabase.delete("items", "kind=?", arrayOf(kind)) }
     fun blocked(thread: Thread): Boolean = list("block").any { (_, j) ->

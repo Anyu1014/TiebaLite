@@ -468,7 +468,6 @@ struct TiebaWebReplySubmissionResponseDTO: Decodable {
             throw ContentSubmissionError.outcomeUnknown
         }
         guard hasUnparseableCode == false,
-              hasUnparseableIdentifier == false,
               (hasResult == false || result != nil) else {
             throw ContentSubmissionError.outcomeUnknown
         }
@@ -507,6 +506,10 @@ struct TiebaWebReplySubmissionResponseDTO: Decodable {
             throw ContentSubmissionError.outcomeUnknown
         }
 
+        // Rejections use zero IDs; identifiers only establish a success receipt.
+        guard hasUnparseableIdentifier == false else {
+            throw ContentSubmissionError.outcomeUnknown
+        }
         let returnedThreadIDs = try validatedPositiveInt64Values(threadIDs)
         guard returnedThreadIDs.isEmpty || returnedThreadIDs == [targetThreadID] else {
             throw ContentSubmissionError.outcomeUnknown

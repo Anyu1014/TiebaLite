@@ -23,6 +23,9 @@ targets:
       - TiebaPure
       - path: LICENSE
         buildPhase: resources
+      - path: ../shared-assets/tieba-emoticons
+        type: folder
+        buildPhase: resources
       - path: LICENSES/SwiftProtobuf-Apache-2.0.txt
         buildPhase: resources
     resources:

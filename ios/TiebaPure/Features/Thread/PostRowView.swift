@@ -12,6 +12,9 @@ struct PostRowView: View {
     let isLikeUpdating: Bool
     let onToggleLike: (() -> Void)?
     let onReply: (() -> Void)?
+    var deletionAccount: Account? = nil
+    var deletionTarget: OwnCommentDeletionTarget? = nil
+    var onDeleted: (() -> Void)? = nil
 
     init(
         post: Post,
@@ -22,7 +25,10 @@ struct PostRowView: View {
         onOpenUser: ((UserSummary) -> Void)? = nil,
         isLikeUpdating: Bool = false,
         onToggleLike: (() -> Void)? = nil,
-        onReply: (() -> Void)? = nil
+        onReply: (() -> Void)? = nil,
+        deletionAccount: Account? = nil,
+        deletionTarget: OwnCommentDeletionTarget? = nil,
+        onDeleted: (() -> Void)? = nil
     ) {
         self.post = post
         self.threadTitle = threadTitle
@@ -33,6 +39,9 @@ struct PostRowView: View {
         self.isLikeUpdating = isLikeUpdating
         self.onToggleLike = onToggleLike
         self.onReply = onReply
+        self.deletionAccount = deletionAccount
+        self.deletionTarget = deletionTarget
+        self.onDeleted = onDeleted
     }
 
     var body: some View {
@@ -100,10 +109,14 @@ struct PostRowView: View {
                         accessibilityIdentifier: isMainPost
                             ? "thread-main-metadata"
                             : "thread-reply-metadata",
+                        timeFormat: isMainPost ? .mainPost : .compact,
                         replyAccessibilityLabel: "回复第\(post.floor)楼",
                         replyAccessibilityIdentifier: "thread-reply-button-\(post.id)",
                         onReply: onReply,
-                        placement: metadataPlacement
+                        placement: metadataPlacement,
+                        deletionAccount: deletionAccount,
+                        deletionTarget: deletionTarget,
+                        onDeleted: onDeleted
                     )
 
                     if post.previewSubposts.isEmpty == false {
@@ -138,6 +151,8 @@ extension PostRowView: Equatable {
             && (lhs.onOpenUser != nil) == (rhs.onOpenUser != nil)
             && (lhs.onToggleLike != nil) == (rhs.onToggleLike != nil)
             && (lhs.onReply != nil) == (rhs.onReply != nil)
+            && lhs.deletionAccount?.sessionIdentity == rhs.deletionAccount?.sessionIdentity
+            && lhs.deletionTarget == rhs.deletionTarget
     }
 }
 
@@ -371,11 +386,12 @@ enum ThreadPostMetadataText {
         createdAt: Date?,
         ipAddress: String?,
         now: Date = Date(),
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        format: ReaderDateText.ThreadMetadataFormat = .compact
     ) -> String {
         var items: [String] = []
         if let createdAt {
-            items.append(ReaderDateText.threadMetadataString(from: createdAt, now: now, calendar: calendar))
+            items.append(ReaderDateText.threadMetadataString(from: createdAt, now: now, calendar: calendar, format: format))
         }
         if let location = normalizedLocation(ipAddress) {
             items.append(location)
@@ -405,14 +421,18 @@ struct ThreadPostMetadataView: View {
     let createdAt: Date?
     let ipAddress: String?
     let accessibilityIdentifier: String
+    var timeFormat: ReaderDateText.ThreadMetadataFormat = .compact
     var replyAccessibilityLabel: String? = nil
     var replyAccessibilityIdentifier: String? = nil
     var onReply: (() -> Void)? = nil
     var placement: ThreadPostMetadataPlacement = .standaloneReply
+    var deletionAccount: Account? = nil
+    var deletionTarget: OwnCommentDeletionTarget? = nil
+    var onDeleted: (() -> Void)? = nil
 
     var body: some View {
-        let displayText = ThreadPostMetadataText.text(createdAt: createdAt, ipAddress: ipAddress)
-        if displayText.isEmpty == false || onReply != nil {
+        let displayText = ThreadPostMetadataText.text(createdAt: createdAt, ipAddress: ipAddress, format: timeFormat)
+        if displayText.isEmpty == false || onReply != nil || deletionTarget != nil {
             HStack(alignment: .center, spacing: TiebaPureTheme.Spacing.sm) {
                 if displayText.isEmpty == false {
                     Text(displayText)
@@ -449,6 +469,9 @@ struct ThreadPostMetadataView: View {
                     .accessibilityLabel(replyAccessibilityLabel ?? "回复")
                     .accessibilityHint("打开回复编辑器")
                     .accessibilityIdentifier(replyAccessibilityIdentifier ?? "thread-reply-button")
+                }
+                if let deletionAccount, let deletionTarget, let onDeleted {
+                    CommentDeletionButton(account: deletionAccount, target: deletionTarget, placement: placement, onDeleted: onDeleted)
                 }
             }
             .frame(

@@ -26,18 +26,14 @@ final class ContentSubmissionSettingsStore: ObservableObject {
         repliesKey = key
         self.newThreadsKey = newThreadsKey
         self.likesKey = likesKey
-        repliesEnabled = defaults.bool(forKey: key)
+        repliesEnabled = Self.readDefaultOnSetting(defaults: defaults, key: key)
         newThreadsEnabled = Self.readDefaultOnSetting(defaults: defaults, key: newThreadsKey)
         likesEnabled = Self.readDefaultOnSetting(defaults: defaults, key: likesKey)
     }
 
     func setRepliesEnabled(_ isEnabled: Bool) {
         guard repliesEnabled != isEnabled else { return }
-        if isEnabled {
-            defaults.set(true, forKey: repliesKey)
-        } else {
-            defaults.removeObject(forKey: repliesKey)
-        }
+        persistDefaultOnSetting(isEnabled, key: repliesKey)
         repliesEnabled = isEnabled
     }
 
@@ -57,7 +53,7 @@ final class ContentSubmissionSettingsStore: ObservableObject {
         defaults.removeObject(forKey: repliesKey)
         defaults.removeObject(forKey: newThreadsKey)
         defaults.removeObject(forKey: likesKey)
-        repliesEnabled = false
+        repliesEnabled = true
         newThreadsEnabled = true
         likesEnabled = true
     }

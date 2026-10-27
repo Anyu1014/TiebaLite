@@ -778,7 +778,8 @@ private struct SavedSubpostRow: View {
                             subpost.ipAddress,
                             subpost.author.ipAddress
                         ),
-                        accessibilityIdentifier: "saved-thread-subpost-metadata"
+                        accessibilityIdentifier: "saved-thread-subpost-metadata",
+                        timeFormat: .subpost
                     )
                 }
                 .padding(.leading, ThreadReplyLayout.bodyLeadingInset)

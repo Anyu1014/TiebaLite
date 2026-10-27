@@ -144,6 +144,17 @@ enum UserProfileRequestFactory {
         return fields
     }
 
+    static func deleteCommentFields(account: Account, tbs: String, target: OwnCommentDeletionTarget, requestBuilder: TiebaRequestBuilder, timestamp: Int64) throws -> [String: String] {
+        try target.validate(account: account)
+        guard !tbs.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw UserProfileAPIError.missingTBS }
+        var fields = requestBuilder.officialCommonFields(bduss: account.bduss, baiduID: account.baiduID, clientVersion: ownThreadDeleteClientVersion, timestamp: timestamp)
+        fields.merge([
+            "delete_my_post": "1", "fid": String(target.forumID), "word": target.forumName.trimmingCharacters(in: .whitespacesAndNewlines),
+            "z": String(target.threadID), "pid": String(target.postID), "isfloor": "0", "src": "1", "is_vipdel": "0", "tbs": tbs
+        ], uniquingKeysWith: { _, new in new })
+        return fields
+    }
+
     static func validateDeletionTarget(_ target: OwnThreadDeletionTarget) throws {
         guard target.forumID > 0 else {
             throw UserProfileMutationError.invalidForumID
@@ -312,6 +323,17 @@ extension TiebaAPI {
             code: response.errorCode,
             message: response.errorMessage
         )
+    }
+
+    func deleteOwnComment(account: Account, target: OwnCommentDeletionTarget) async throws {
+        try target.validate(account: account)
+        try Task.checkCancellation()
+        let tbs = try await refreshedClientTBS(for: account)
+        try Task.checkCancellation()
+        let timestamp = Int64(Date().timeIntervalSince1970 * 1_000)
+        let fields = try UserProfileRequestFactory.deleteCommentFields(account: account, tbs: tbs, target: target, requestBuilder: requestBuilder, timestamp: timestamp)
+        let response = try await sendFinalUserProfileMutation(endpoint: .deleteOwnComment, fields: fields, headers: requestBuilder.officialHeaders(baiduID: account.baiduID, clientVersion: UserProfileRequestFactory.ownThreadDeleteClientVersion, timestamp: timestamp))
+        try TiebaResponseValidator.validate(code: response.errorCode, message: response.errorMessage)
     }
 
     func setUserFollowed(account: Account, user: UserSummary, followed: Bool) async throws {

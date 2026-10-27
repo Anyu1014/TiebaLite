@@ -487,17 +487,38 @@ struct KeywordHighlightedText: View {
     var font: Font
     var lineLimit: Int
     var defaultColor: Color = .primary
+    @Environment(\.displayScale) private var displayScale
+    @StateObject private var artwork: TiebaEmoticonArtworkObserver
+
+    init(text: String, keyword: String? = nil, font: Font, lineLimit: Int, defaultColor: Color = .primary) {
+        self.text = text
+        self.keyword = keyword
+        self.font = font
+        self.lineLimit = lineLimit
+        self.defaultColor = defaultColor
+        _artwork = StateObject(wrappedValue: TiebaEmoticonArtworkObserver(imageNames: Set(TiebaEmoticon.blocks(from: text).compactMap {
+            guard case let .emoticon(code) = $0 else { return nil }
+            return TiebaEmoticon.imageName(for: code)
+        })))
+    }
 
     var body: some View {
-        composedText
-            .font(font)
-            .lineLimit(lineLimit)
+        let _ = artwork.revision
+        composedText.font(font).lineLimit(lineLimit)
     }
 
     private var composedText: Text {
-        KeywordHighlighter.segments(in: text, keyword: keyword).reduce(Text("")) { partial, segment in
-            partial + Text(segment.text)
-                .foregroundColor(segment.isHighlighted ? .red : defaultColor)
+        TiebaEmoticon.blocks(from: text).reduce(Text("")) { partial, block in
+            if case let .emoticon(code) = block {
+                let font = UIFont.preferredFont(forTextStyle: .body)
+                if let image = InlineEmoticonImage.image(for: code, pointSize: font.lineHeight, displayScale: displayScale) {
+                    return partial + Text(Image(uiImage: image)).baselineOffset(font.descender)
+                }
+                return partial + Text(TiebaEmoticon.displayText(for: code)).foregroundColor(defaultColor)
+            }
+            return KeywordHighlighter.segments(in: block.plainText ?? "", keyword: keyword).reduce(partial) { value, segment in
+                value + Text(segment.text).foregroundColor(segment.isHighlighted ? .red : defaultColor)
+            }
         }
     }
 }
@@ -1400,7 +1421,7 @@ struct InlineContentText: UIViewRepresentable {
             }
         }
 
-        for block in blocks {
+        for block in TiebaEmoticon.normalizedBlocks(blocks) {
             switch block {
             case let .text(text):
                 appendHighlightedText(
@@ -1462,7 +1483,7 @@ struct InlineContentText: UIViewRepresentable {
                 result.append(Self.threadAuthorBadgeTitle)
             }
         }
-        for block in blocks {
+        for block in TiebaEmoticon.normalizedBlocks(blocks) {
             switch block {
             case let .text(text):
                 result.append(text)
@@ -1522,7 +1543,7 @@ struct InlineContentText: UIViewRepresentable {
     }
 
     private var emoticonImageNames: Set<String> {
-        Set(blocks.compactMap { block in
+        Set(TiebaEmoticon.normalizedBlocks(blocks).compactMap { block in
             guard case let .emoticon(code) = block else { return nil }
             return TiebaEmoticon.imageName(for: code)
         })
@@ -1722,7 +1743,7 @@ private struct InlineContentGroup: Identifiable {
             media = []
         }
 
-        for block in blocks {
+        for block in TiebaEmoticon.normalizedBlocks(blocks) {
             switch block {
             case .text, .link, .mention, .emoticon:
                 flushMedia()

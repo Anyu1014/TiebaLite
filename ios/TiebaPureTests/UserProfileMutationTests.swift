@@ -442,6 +442,36 @@ final class UserProfileMutationTests: XCTestCase {
         }
     }
 
+    func testDeleteCommentRefreshesTBSAndSendsOnlyTheSelectedPost() async throws {
+        let harness = makeAPI(mode: .success)
+        defer { ProfileMutationURLProtocol.remove(id: harness.id) }
+        let target = OwnCommentDeletionTarget(forumID: 73, forumName: "夹具", threadID: 1001, postID: 2002, authorID: Int64(Self.account.uid)!, floor: 2)
+        try await harness.api.deleteOwnComment(account: Self.account, target: target)
+        let records = ProfileMutationURLProtocol.records(id: harness.id)
+        XCTAssertEqual(records.map(\.path), ["/c/s/login", "/c/c/bawu/delpost"])
+        let fields = try Self.formFields(try XCTUnwrap(records.last).body)
+        XCTAssertEqual(fields["pid"], "2002")
+        XCTAssertEqual(fields["tbs"], "fresh-tbs")
+        XCTAssertEqual(fields["delete_my_post"], "1")
+        XCTAssertNil(fields["delete_my_thread"])
+        XCTAssertNotNil(fields["sign"])
+    }
+
+    func testLostOrMalformedCommentDeletionResponseIsNotRetried() async {
+        for mode in [ProfileMutationStubMode.transportFailure, .decodeFailure] {
+            let harness = makeAPI(mode: mode)
+            let target = OwnCommentDeletionTarget(forumID: 73, forumName: "夹具", threadID: 1001, postID: 2002, authorID: Int64(Self.account.uid)!, floor: 2)
+            do {
+                try await harness.api.deleteOwnComment(account: Self.account, target: target)
+                XCTFail("An unconfirmed deletion must not report success")
+            } catch {
+                XCTAssertEqual(error as? UserProfileMutationError, .outcomeUnknown)
+            }
+            XCTAssertEqual(ProfileMutationURLProtocol.count(path: "/c/c/bawu/delpost", id: harness.id), 1)
+            ProfileMutationURLProtocol.remove(id: harness.id)
+        }
+    }
+
     func testDeleteRefreshesTBSThenSendsExactlyOneFinalMutation() async throws {
         let harness = makeAPI(mode: .success)
         defer { ProfileMutationURLProtocol.remove(id: harness.id) }
@@ -1303,7 +1333,7 @@ private final class ProfileMutationURLProtocol: URLProtocol {
         switch url.path {
         case "/c/s/login":
             respond(Data(#"{"error_code":"0","anti":{"tbs":"fresh-tbs"}}"#.utf8))
-        case "/c/c/profile/modify", "/c/c/bawu/delthread":
+        case "/c/c/profile/modify", "/c/c/bawu/delthread", "/c/c/bawu/delpost":
             switch mode {
             case .success:
                 respond(Data(#"{"error_code":0,"error_msg":""}"#.utf8))

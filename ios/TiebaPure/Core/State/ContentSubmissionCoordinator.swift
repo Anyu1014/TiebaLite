@@ -36,6 +36,7 @@ final class ContentSubmissionCoordinator {
     enum AccountWriteTarget: Hashable, Sendable {
         case profile
         case deleteThread(Int64)
+        case deleteComment(UInt64)
         case threadFavorite(Int64)
     }
 

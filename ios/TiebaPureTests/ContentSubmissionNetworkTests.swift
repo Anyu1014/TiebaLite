@@ -1016,6 +1016,14 @@ final class ContentSubmissionNetworkIntegrationTests: XCTestCase {
     func testWebReplyBusinessSessionVerificationAndAmbiguousResponsesStayTyped() async {
         let cases: [(String, ContentSubmissionError)] = [
             (
+                #"{"no":401,"error":"内容不能为空","data":{"tid":0,"pid":0,"fid":0}}"#,
+                .business(code: 401, message: "内容不能为空")
+            ),
+            (
+                #"{"no":40,"error":"请完成安全验证","data":{"tid":0,"pid":0}}"#,
+                .verificationRequired(message: "请完成安全验证")
+            ),
+            (
                 #"{"no":7,"error":"操作频繁"}"#,
                 .business(code: 7, message: "操作频繁")
             ),

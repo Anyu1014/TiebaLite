@@ -40,6 +40,7 @@ protocol TiebaAPIService {
     func userThreads(account: Account?, userID: Int64, page: Int) async throws -> UserThreadsPage
     func updateOwnProfile(account: Account, request: UserProfileEditRequest) async throws
     func deleteOwnThread(account: Account, target: OwnThreadDeletionTarget) async throws
+    func deleteOwnComment(account: Account, target: OwnCommentDeletionTarget) async throws
     func setUserFollowed(account: Account, user: UserSummary, followed: Bool) async throws
     func userRelationships(
         account: Account?,
@@ -97,6 +98,9 @@ extension TiebaAPIService {
     }
 
     func deleteOwnThread(account: Account, target: OwnThreadDeletionTarget) async throws {
+        throw UserProfileMutationError.unsupportedByService
+    }
+    func deleteOwnComment(account: Account, target: OwnCommentDeletionTarget) async throws {
         throw UserProfileMutationError.unsupportedByService
     }
 

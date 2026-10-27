@@ -3,6 +3,19 @@ package dev.anyu.tiebapure
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
+
+internal enum class PostTimestampFormat(pattern: String) {
+    MAIN_POST("HH:mm:ss'「'yyyy-MM-dd'」'"),
+    SUBPOST("HH:mm'「'MM-dd'」'");
+
+    val formatter: DateTimeFormatter = DateTimeFormatter.ofPattern(pattern, Locale.ROOT)
+}
+
+internal fun postTimestampText(epoch: Long, format: PostTimestampFormat, zone: ZoneId = ZoneId.systemDefault()): String {
+    if (epoch !in 1..253402300799L) return ""
+    return Instant.ofEpochSecond(epoch).atZone(zone).format(format.formatter)
+}
 
 fun readerDateText(epoch: Long, now: Long = System.currentTimeMillis() / 1000, zone: ZoneId = ZoneId.systemDefault()): String {
     if (epoch !in 1..253402300799L) return ""

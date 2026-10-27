@@ -6,7 +6,7 @@ MODE="${1:-debug}"
 /Users/y/toolchains/bin/node "$ROOT/scripts/sync-config.mjs"
 /Users/y/toolchains/bin/xcodegen generate --spec "$ROOT/ios/project.yml" --project "$ROOT/ios" --project-root "$ROOT/ios"
 COMMON=(-project "$ROOT/ios/TiebaPure.xcodeproj" -scheme TiebaPure -derivedDataPath "$ROOT/.build/ios")
-mkdir -p "$ROOT/logs" "$ROOT/releases/ios"
+mkdir -p "$ROOT/logs" "$ROOT/.build"
 case "$MODE" in
   debug)
     /Users/y/toolchains/bin/xcodebuild "${COMMON[@]}" -configuration Debug -sdk iphoneos -destination 'generic/platform=iOS' build CODE_SIGNING_ALLOWED=NO ;;
@@ -19,10 +19,9 @@ case "$MODE" in
       mkdir -p "$PACKAGE/Payload"
       /usr/bin/ditto "$ARCHIVE/Products/Applications/TiebaPure.app" "$PACKAGE/Payload/TiebaPure.app"
       VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PACKAGE/Payload/TiebaPure.app/Info.plist")"
-      OUTPUT="$ROOT/releases/ios/TiebaLite-$VERSION-unsigned.ipa"
       (cd "$PACKAGE" && /usr/bin/zip -qry archive.ipa Payload)
       /usr/bin/unzip -t "$PACKAGE/archive.ipa"
-      mv "$PACKAGE/archive.ipa" "$OUTPUT"
+      OUTPUT="$(/Users/y/toolchains/bin/node "$ROOT/scripts/store-package.mjs" "$PACKAGE/archive.ipa" "TiebaLite-$VERSION-unsigned.ipa")"
       /usr/bin/shasum -a 256 "$OUTPUT"
     fi ;;
   test)
@@ -33,6 +32,13 @@ case "$MODE" in
     /Users/y/toolchains/bin/xcodebuild "${COMMON[@]}" -configuration Release -destination 'generic/platform=iOS' -archivePath "$ROOT/.build/TiebaLite-signed.xcarchive" archive DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" ;;
   export)
     : "${2:?Provide an ExportOptions.plist matching your signing method}"
-    /Users/y/toolchains/bin/xcodebuild -exportArchive -archivePath "$ROOT/.build/TiebaLite-signed.xcarchive" -exportOptionsPlist "$2" -exportPath "$ROOT/releases/ios" ;;
+    EXPORT="$(mktemp -d "$ROOT/.build/ios-export.XXXXXX")"
+    /Users/y/toolchains/bin/xcodebuild -exportArchive -archivePath "$ROOT/.build/TiebaLite-signed.xcarchive" -exportOptionsPlist "$2" -exportPath "$EXPORT"
+    shopt -s nullglob
+    EXPORTED_IPAS=("$EXPORT"/*.ipa)
+    [[ ${#EXPORTED_IPAS[@]} -eq 1 ]] || { echo 'Expected one exported IPA' >&2; exit 1; }
+    VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ROOT/.build/TiebaLite-signed.xcarchive/Products/Applications/TiebaPure.app/Info.plist")"
+    OUTPUT="$(/Users/y/toolchains/bin/node "$ROOT/scripts/store-package.mjs" "${EXPORTED_IPAS[0]}" "TiebaLite-$VERSION.ipa")"
+    /usr/bin/shasum -a 256 "$OUTPUT" ;;
   *) echo 'Usage: build-ios.sh debug|archive|ipa|test|signed-archive|export <ExportOptions.plist>' >&2; exit 2 ;;
 esac

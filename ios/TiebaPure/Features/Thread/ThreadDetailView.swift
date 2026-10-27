@@ -364,6 +364,7 @@ struct ThreadDetailView: View {
                 initialSubpostID: pendingSubpostInitialID,
                 threadAuthorID: threadAuthorID,
                 onPostLikeChanged: applyChangedPost,
+                onCommentDeleted: removeDeletedComment,
                 onInteractiveDismiss: { selectedSubpostPost = nil }
             )
             .environmentObject(environment)
@@ -573,7 +574,7 @@ struct ThreadDetailView: View {
                     onToggleLike: contentSubmissionSettingsStore.likesEnabled && mainPost.id > 0
                         ? { toggleLike(for: mainPost, objectType: .thread) }
                         : nil,
-                    onReply: contentSubmissionSettingsStore.repliesEnabled && mainPost.id > 0
+                    onReply: mainPost.id > 0
                         ? { openReplyComposer(for: mainPost) }
                         : nil
                 )
@@ -644,9 +645,10 @@ struct ThreadDetailView: View {
                     onToggleLike: contentSubmissionSettingsStore.likesEnabled
                         ? { toggleLike(for: post, objectType: .post) }
                         : nil,
-                    onReply: contentSubmissionSettingsStore.repliesEnabled
-                        ? { openReplyComposer(for: post) }
-                        : nil
+                    onReply: { openReplyComposer(for: post) },
+                    deletionAccount: account,
+                    deletionTarget: commentDeletionTarget(for: post),
+                    onDeleted: { removeDeletedComment(post.id) }
                 )
                 .equatable()
                 .threadPreciseScrollAnchor(
@@ -1012,6 +1014,18 @@ struct ThreadDetailView: View {
                 if isPresented == false { contentActionError = nil }
             }
         )
+    }
+
+    private func commentDeletionTarget(for post: Post) -> OwnCommentDeletionTarget? {
+        guard post.floor > 1, Int64(account?.uid ?? "") == post.author.id,
+              let page = threadPage, let forum = resolvedForum(for: page) else { return nil }
+        return OwnCommentDeletionTarget(forumID: forum.id, forumName: forum.name, threadID: threadID, postID: post.id, authorID: post.author.id, floor: post.floor)
+    }
+
+    private func removeDeletedComment(_ id: UInt64) {
+        posts.removeAll { $0.id == id }
+        threadPage?.posts.removeAll { $0.id == id }
+        if selectedSubpostPost?.id == id { selectedSubpostPost = nil }
     }
 
     private func openThreadReplyComposer() {
@@ -2074,7 +2088,7 @@ struct ThreadDetailView: View {
     }
 
     private func openSubpostsIfPossible(_ post: Post) {
-        guard post.subpostCount > 0 else { return }
+        guard post.subpostCount > 0 || !post.previewSubposts.isEmpty else { return }
         selectedSubpostPost = post
     }
 
@@ -2751,6 +2765,7 @@ private struct SubpostListSheet: View {
     let forum: Forum
     let threadAuthorID: Int64?
     let onPostLikeChanged: (Post) -> Void
+    let onCommentDeleted: (UInt64) -> Void
     let onInteractiveDismiss: () -> Void
 
     @State private var post: Post
@@ -2786,6 +2801,7 @@ private struct SubpostListSheet: View {
         initialSubpostID: UInt64? = nil,
         threadAuthorID: Int64?,
         onPostLikeChanged: @escaping (Post) -> Void,
+        onCommentDeleted: @escaping (UInt64) -> Void,
         onInteractiveDismiss: @escaping () -> Void
     ) {
         self.account = account
@@ -2793,6 +2809,7 @@ private struct SubpostListSheet: View {
         self.forum = forum
         self.threadAuthorID = threadAuthorID
         self.onPostLikeChanged = onPostLikeChanged
+        self.onCommentDeleted = onCommentDeleted
         self.onInteractiveDismiss = onInteractiveDismiss
         _post = State(initialValue: post)
         _pendingSubmittedSubpostID = State(initialValue: initialSubpostID)
@@ -2866,11 +2883,15 @@ private struct SubpostListSheet: View {
                                                 post.author.ipAddress
                                             ),
                                             accessibilityIdentifier: "thread-subpost-parent-metadata",
+                                            timeFormat: .subpost,
                                             replyAccessibilityLabel: "回复第\(post.floor)楼",
                                             replyAccessibilityIdentifier: "subposts-compose-reply-button",
                                             onReply: contentSubmissionSettingsStore.repliesEnabled
                                                 ? openParentReplyComposer
-                                                : nil
+                                                : nil,
+                                            deletionAccount: account,
+                                            deletionTarget: parentDeletionTarget,
+                                            onDeleted: { onCommentDeleted(post.id); onInteractiveDismiss() }
                                         )
                                     }
                                     .padding(.leading, ThreadReplyLayout.bodyLeadingInset)
@@ -2888,9 +2909,10 @@ private struct SubpostListSheet: View {
                                     onToggleLike: contentSubmissionSettingsStore.likesEnabled
                                         ? { toggleSubpostLike(subpost) }
                                         : nil,
-                                    onReply: contentSubmissionSettingsStore.repliesEnabled
-                                        ? { openSubpostReplyComposer(subpost) }
-                                        : nil
+                                    onReply: { openSubpostReplyComposer(subpost) },
+                                    deletionAccount: account,
+                                    deletionTarget: deletionTarget(for: subpost),
+                                    onDeleted: { removeDeletedSubpost(subpost) }
                                 )
                                     .onAppear {
                                         guard PaginationPrefetchPolicy.shouldLoadMore(
@@ -3082,6 +3104,23 @@ private struct SubpostListSheet: View {
                   composerRoute == nil else { return }
             submissionReloadTask = nil
         }
+    }
+
+    private var parentDeletionTarget: OwnCommentDeletionTarget? {
+        guard post.floor > 1, Int64(account?.uid ?? "") == post.author.id else { return nil }
+        return OwnCommentDeletionTarget(forumID: forum.id, forumName: forum.name, threadID: thread.id, postID: post.id, authorID: post.author.id, floor: post.floor)
+    }
+
+    private func deletionTarget(for subpost: Subpost) -> OwnCommentDeletionTarget? {
+        guard Int64(account?.uid ?? "") == subpost.author.id else { return nil }
+        return OwnCommentDeletionTarget(forumID: forum.id, forumName: forum.name, threadID: thread.id, postID: subpost.id, authorID: subpost.author.id, floor: subpost.floor, parentPostID: post.id)
+    }
+
+    private func removeDeletedSubpost(_ subpost: Subpost) {
+        subposts.removeAll { $0.id == subpost.id }
+        post.previewSubposts.removeAll { $0.id == subpost.id }
+        post.subpostCount = max(0, post.subpostCount - 1)
+        onPostLikeChanged(post)
     }
 
     private func openParentReplyComposer() {
@@ -3346,6 +3385,9 @@ private struct SubpostRowView: View {
     let isLikeUpdating: Bool
     let onToggleLike: (() -> Void)?
     let onReply: (() -> Void)?
+    var deletionAccount: Account? = nil
+    var deletionTarget: OwnCommentDeletionTarget? = nil
+    var onDeleted: (() -> Void)? = nil
 
     var body: some View {
         ReaderCard(
@@ -3385,9 +3427,13 @@ private struct SubpostRowView: View {
                             subpost.author.ipAddress
                         ),
                         accessibilityIdentifier: "thread-subpost-metadata",
+                        timeFormat: .subpost,
                         replyAccessibilityLabel: "回复用户\(subpost.author.displayNameResolved)",
                         replyAccessibilityIdentifier: "subpost-reply-button-\(subpost.id)",
-                        onReply: onReply
+                        onReply: onReply,
+                        deletionAccount: deletionAccount,
+                        deletionTarget: deletionTarget,
+                        onDeleted: onDeleted
                     )
                 }
                 .padding(.leading, ThreadReplyLayout.bodyLeadingInset)

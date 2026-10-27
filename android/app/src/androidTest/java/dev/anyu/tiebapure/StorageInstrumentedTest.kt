@@ -54,6 +54,19 @@ class StorageInstrumentedTest {
         assertEquals(500, store.list("history").size)
         assertNotNull(store.get("history", "503"))
     }
+    @Test fun forumAvatarUpdatesKeepRecentOrderAndDoNotRestoreDeletedRecords() {
+        store.put("forum", "旅行", JSONObject().put("name", "旅行"))
+        android.os.SystemClock.sleep(5)
+        store.put("forum", "北京", JSONObject().put("name", "北京"))
+        val before = store.list("forum").map { it.first }
+        val info = ForumEntry("42", "旅行", "https://himg.bdimg.com/sys/portrait/item/fixture")
+        store.updateForumMetadata("旅行", info)
+        assertEquals(before, store.list("forum").map { it.first })
+        assertEquals(info.avatar, store.get("forum", "旅行")!!.getString("avatar"))
+        store.clear("forum")
+        store.updateForumMetadata("旅行", info)
+        assertTrue(store.list("forum").isEmpty())
+    }
     @Test fun localMediaRejectsTraversalAndReaderCountsWholeEmoji() {
         assertNull(OfflineLibrary.safeFile(context, "../credentials.xml"))
         assertNull(OfflineLibrary.safeFile(context, "/data/local/tmp/x"))

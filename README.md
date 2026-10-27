@@ -1,6 +1,10 @@
 # TiebaLite
 
-Anyu 维护的非官方百度贴吧客户端。版本 **1.0（build 61）**，应用标识 `dev.anyu.tiebalite`。iOS 使用 SwiftUI，Android 使用 Kotlin 与 Compose。与百度及贴吧官方无隶属、授权或认可关系。
+Anyu 维护的非官方百度贴吧客户端。源码及双端签名安装包为 **1.1（build 67）**，应用标识 `dev.anyu.tiebalite`。iOS 使用 SwiftUI，Android 使用 Kotlin 与 Compose。与百度及贴吧官方无隶属、授权或认可关系。
+
+1.1包含回复输入焦点卡死修复、评论错误回包识别、双端发帖/楼中楼时间格式、Android全局紧凑顶栏及贴吧分类调整；源码保存在[1.1分支](https://github.com/Anyu1014/TiebaLite/tree/1.1)。
+
+本地1.1变更与验证见[1.1记录](docs/releases/1.1.md)：双端贴吧原生表情覆盖正文、评论、楼中楼、预览及输入框，内置59个常用原图；iOS只保留下方回复入口，Android回帖条固定屏幕底部。单条楼中楼也可展开至本人回复的删除入口。签名包为`lastest/TiebaLite-1.1.apk`与`lastest/TiebaLite-1.1.ipa`。1.1签名包保留在本机；以下链接为既有公开1.0发行。
 
 - [1.0 源码分支](https://github.com/Anyu1014/TiebaLite/tree/1.0)
 - [1.0 发行版与安装包](https://github.com/Anyu1014/TiebaLite/releases/tag/1.0)
@@ -14,6 +18,8 @@ Anyu 维护的非官方百度贴吧客户端。版本 **1.0（build 61）**，�
 - 关于页显示版本1.0、作者Anyu，源码链接指向本仓库，GPL许可条目名称显示TiebaLite。
 
 ## 安装包
+
+本机`lastest/`与`releases/`为工作区内的同级文件夹：`lastest/`保留当前APK和签名IPA各一份；`releases/`保存历史版本。生成不同内容的同平台新包时，旧包自动移入`releases/`后再替换当前包，不影响另一平台。相同SHA256不重复保存；Debug包与未签名IPA直接归入`releases/`，不替换当前签名包。构建校验记录在`.build/release-records/`；目录整理不会更新GitHub发行。
 
 发行版提供 `TiebaLite-1.0.apk`（Android签名Release）与 `TiebaLite-1.0-unsigned.ipa`（iOS可重签包），以及对应源码zip、manifest和SHA256校验文件。
 

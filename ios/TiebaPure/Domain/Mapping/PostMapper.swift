@@ -2,7 +2,13 @@ import Foundation
 
 enum PostMapper {
     static func blocks(from contents: [Tieba_PbContent]) -> [ContentBlock] {
-        deduplicatingVoices(in: contents.flatMap(blocks))
+        let mapped = contents.flatMap(blocks)
+        let hasImages = mapped.contains { if case .image = $0 { return true }; return false }
+        return deduplicatingVoices(in: mapped.compactMap { block in
+            guard hasImages, case let .text(text) = block else { return block }
+            let clean = text.replacingOccurrences(of: #"\(?_ImageToUpload_\)?"#, with: "", options: .regularExpression)
+            return clean.isEmpty ? nil : .text(clean)
+        })
     }
 
     static func subpostBlocks(
@@ -25,6 +31,10 @@ enum PostMapper {
             let code = emoticonCode(from: content) ?? ""
             return code.isEmpty ? [] : [.emoticon(code: code)]
         case 3, 20:
+            if let name = [content.originSrc, content.bigCdnSrc, content.cdnSrc, content.bigSrc, content.src]
+                .compactMap(TiebaEmoticon.imageName(fromURL:)).first {
+                return [.emoticon(code: name)]
+            }
             let size = parseSize(content.bsize, fallbackWidth: content.width, fallbackHeight: content.height)
             let thumbnailURL = url(firstNonEmpty(
                 content.cdnSrc,
@@ -238,6 +248,8 @@ enum PostMapper {
         }) {
             return renderable
         }
+        if let name = [content.src, content.cdnSrc, content.originSrc, content.c, content.text]
+            .compactMap(TiebaEmoticon.imageName(fromURL:)).first { return name }
         return firstNonEmpty(content.c, content.text)
     }
 

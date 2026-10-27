@@ -382,7 +382,7 @@ struct FixtureTiebaAPI: TiebaAPIService {
             thread: thread,
             forum: Self.forum,
             mainPost: omitsMainPost ? nil : main,
-            posts: posts,
+            posts: await state.removingDeletedComments(from: posts),
             currentPage: page,
             totalPage: 1,
             hasMore: false,
@@ -412,7 +412,7 @@ struct FixtureTiebaAPI: TiebaAPIService {
             fixtureSubposts = Self.subpostFixtures
         }
         let submittedSubposts = await state.submittedSubposts(parentPostID: postID)
-        return fixtureSubposts + submittedSubposts
+        return await state.removingDeletedComments(from: fixtureSubposts + submittedSubposts)
     }
 
     func userProfile(account: Account?, user: UserSummary) async throws -> UserProfile {
@@ -477,6 +477,19 @@ struct FixtureTiebaAPI: TiebaAPIService {
         try UserProfileRequestFactory.validateDeletionTarget(target)
         try await prepare()
         await state.deleteThread(target.threadID)
+    }
+    func deleteOwnComment(account: Account, target: OwnCommentDeletionTarget) async throws {
+        try target.validate(account: account)
+        let authorID: Int64?
+        if let parent = target.parentPostID {
+            let comments = try await subposts(account: account, threadID: target.threadID, postID: parent, forumID: target.forumID, page: 1, subpostID: 0)
+            authorID = comments.first { $0.id == target.postID }?.author.id
+        } else {
+            let page = try await threadPage(account: account, threadID: target.threadID, page: 1, forumID: target.forumID, postID: nil, seeLz: false, sortType: .ascending)
+            authorID = page.posts.first { $0.id == target.postID }?.author.id
+        }
+        guard authorID == Int64(account.uid) else { throw CommentDeletionError.notOwner }
+        await state.deleteComment(target.postID)
     }
 
     func setUserFollowed(account: Account, user: UserSummary, followed: Bool) async throws {
@@ -1238,6 +1251,7 @@ private actor FixtureRequestState {
     private var submittedSubpostValues: [UInt64: [Subpost]] = [:]
     private var profileEditsByAccountID: [String: UserProfileEditRequest] = [:]
     private var deletedThreadIDs = Set<Int64>()
+    private var deletedCommentIDs = Set<UInt64>()
     private var nextThreadID: Int64 = 9_001
     private var nextPostID: UInt64 = 19_001
 
@@ -1305,6 +1319,19 @@ private actor FixtureRequestState {
         submittedThreadValues[threadID] = nil
         submittedMainPostValues[threadID] = nil
         submittedPostValues[threadID] = nil
+    }
+    func deleteComment(_ id: UInt64) { deletedCommentIDs.insert(id) }
+    func removingDeletedComments(from posts: [Post]) -> [Post] {
+        posts.filter { !deletedCommentIDs.contains($0.id) }.map { post in
+            var post = post
+            let count = post.previewSubposts.count
+            post.previewSubposts.removeAll { deletedCommentIDs.contains($0.id) }
+            post.subpostCount = max(0, post.subpostCount - (count - post.previewSubposts.count))
+            return post
+        }
+    }
+    func removingDeletedComments(from subposts: [Subpost]) -> [Subpost] {
+        subposts.filter { !deletedCommentIDs.contains($0.id) }
     }
 
     func removingDeletedThreads(from threads: [ThreadSummary]) -> [ThreadSummary] {

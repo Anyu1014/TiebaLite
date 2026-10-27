@@ -21,6 +21,11 @@ struct SubpostPreviewView: View {
         self.onOpenUser = onOpenUser
     }
 
+    var openAllCount: Int? {
+        guard !subposts.isEmpty, onOpenAll != nil else { return nil }
+        return max(totalCount, subposts.count)
+    }
+
     var body: some View {
         if subposts.isEmpty == false {
             VStack(alignment: .leading, spacing: SubpostPreviewLayout.openAllTopSpacing) {
@@ -30,17 +35,18 @@ struct SubpostPreviewView: View {
                             subpost: subpost,
                             threadAuthorID: threadAuthorID,
                             lineLimit: ThreadContentDisplayPolicy.detailLineLimit,
-                            onOpenUser: onOpenUser
+                            onOpenUser: onOpenUser,
+                            onOpenReplies: onOpenAll
                         )
                     }
                 }
 
-                if totalCount > subposts.count, let onOpenAll {
+                if let count = openAllCount, let onOpenAll {
                     Button {
                         onOpenAll()
                     } label: {
                         HStack(spacing: 2) {
-                            Text("查看全部\(totalCount)条回复")
+                            Text("查看全部\(count)条回复")
                             Image(systemName: "chevron.right")
                                 .font(.footnote.weight(.semibold))
                         }
@@ -58,7 +64,7 @@ struct SubpostPreviewView: View {
                         .interaction,
                         Rectangle().inset(by: -SubpostPreviewLayout.openAllHitExpansion)
                     )
-                    .accessibilityLabel("查看全部\(totalCount)条回复")
+                    .accessibilityLabel("查看全部\(count)条回复")
                 }
             }
             .padding(.horizontal, TiebaPureTheme.Spacing.sm)
@@ -89,6 +95,7 @@ struct SubpostInlineRow: View {
     let threadAuthorID: Int64?
     var lineLimit: Int = ThreadContentDisplayPolicy.detailLineLimit
     var onOpenUser: ((UserSummary) -> Void)?
+    var onOpenReplies: (() -> Void)? = nil
 
     var body: some View {
         InlineContentText(
@@ -106,7 +113,8 @@ struct SubpostInlineRow: View {
                 for: lineLimit
             ),
             accessibilityIdentifier: "thread-subpost-preview-text",
-            onOpenUser: onOpenUser
+            onOpenUser: onOpenUser,
+            onPlainTextTap: onOpenReplies
         )
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, alignment: .leading)

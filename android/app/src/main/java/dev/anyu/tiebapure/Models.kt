@@ -14,16 +14,27 @@ data class ThreadPage(val thread: Thread, val forumId: String, val posts: List<P
 data class Profile(val user: User, val intro: String, val gender: Int, val following: Int, val fans: Int, val threads: Int, val followed: Boolean, val forums: List<Pair<String, String>> = emptyList(), val forumsPrivate: Boolean = false)
 data class Account(val uid: String, val name: String, val bduss: String, val stoken: String, val tbs: String, val portrait: String = "") {
     fun sessionMatches(other: Account?) = other != null && uid == other.uid && bduss == other.bduss && stoken == other.stoken
+    fun withIdentity(user: User): Account {
+        if (user.id != uid) return this
+        return copy(name = user.name.trim().takeIf { it.isNotBlank() && it != "贴吧用户" } ?: name.trim().ifBlank { "贴吧用户" },
+            portrait = user.portrait.takeIf { Policy.avatar(it) != null } ?: portrait)
+    }
     fun json() = JSONObject().put("uid", uid).put("name", name).put("bduss", bduss).put("stoken", stoken).put("tbs", tbs).put("portrait", portrait)
     companion object {
         fun parse(j: JSONObject): Account {
-            val account = Account(j.getString("uid"), j.getString("name"), j.getString("bduss"), j.getString("stoken"), j.getString("tbs"), j.optString("portrait"))
+            val account = Account(j.getString("uid"), j.optString("name").trim().ifBlank { "贴吧用户" }, j.getString("bduss"), j.getString("stoken"), j.getString("tbs"), j.optString("portrait"))
             require(account.uid.toLongOrNull()?.let { it > 0 } == true && account.tbs.isNotBlank()) { "账号资料不完整" }
             require(Policy.cookie(account.bduss) && Policy.cookie(account.stoken)) { "账号凭据格式无效" }
             return account
         }
     }
 }
+
+data class ForumEntry(val id: String, val name: String, val avatar: String = "")
+internal fun forumEntry(j: JSONObject, fallbackName: String = ""): ForumEntry = ForumEntry(
+    j.text("forum_id", "fid", "id"), j.text("forum_name", "name").ifBlank { fallbackName },
+    Policy.avatar(j.text("avatar", "avatar_url", "forum_avatar")).orEmpty()
+)
 
 data class Route(val kind: String = "home", val id: String = "", val title: String = "", val extra: String = "")
 
@@ -34,13 +45,20 @@ object Policy {
     } == true
     fun mediaUrl(raw: String): String? = raw.toHttpUrlOrNull()?.takeIf { u ->
         u.isHttps && u.username.isEmpty() && u.password.isEmpty() && u.port == 443 &&
-            listOf("baidu.com", "bdstatic.com", "baidupcs.com", "bcebos.com").any { u.host == it || u.host.endsWith(".$it") }
+            (u.host == "himg.bdimg.com" || listOf("baidu.com", "bdstatic.com", "baidupcs.com", "bcebos.com").any { u.host == it || u.host.endsWith(".$it") })
     }?.toString()
     fun loginUrl(raw: String): Boolean = raw.toHttpUrlOrNull()?.let {
         it.isHttps && (it.host == "baidu.com" || it.host.endsWith(".baidu.com")) && it.username.isEmpty() && it.password.isEmpty() && it.port == 443
     } == true
     fun cookie(raw: String) = raw.isNotBlank() && raw.length <= 4096 && raw.all { it.code in 33..126 && it != ';' && it != ',' }
-    fun avatar(raw: String): String? = mediaUrl(raw) ?: raw.substringBefore('?').takeIf { it.matches(Regex("[A-Za-z0-9_.-]{1,512}")) }?.let { "https://tb.himg.baidu.com/sys/portrait/item/$it" }
+    fun avatar(raw: String): String? {
+        val text = raw.trim().replaceFirst(Regex("^http://"), "https://")
+        text.toHttpUrlOrNull()?.let { url ->
+            val migrated = if (url.host == "tb.himg.baidu.com") url.newBuilder().host("himg.bdimg.com").build() else url
+            return mediaUrl(migrated.toString())
+        }
+        return text.substringBefore('?').takeIf { it.matches(Regex("[A-Za-z0-9_.-]{1,512}")) }?.let { "https://himg.bdimg.com/sys/portrait/item/$it" }
+    }
     fun webpage(raw: String): String? = raw.toHttpUrlOrNull()?.takeIf { u -> u.isHttps && u.port == 443 && u.username.isEmpty() && u.password.isEmpty() && u.host.contains('.') && !u.host.contains(':') && !u.host.matches(Regex("[0-9.]+")) && !u.host.endsWith(".local") && !u.host.endsWith(".localhost") }?.toString()
     fun voice(md5: String): String? = md5.takeIf { it.matches(Regex("[a-fA-F0-9]{32}")) }?.let { "https://tiebac.baidu.com/c/p/voice?voice_md5=${it.lowercase()}&play_from=pb_voice_play" }
     fun signedId(raw: String): Long = raw.toLongOrNull()?.takeIf { it > 0 } ?: error("无效或超出范围的 ID")
@@ -74,6 +92,8 @@ object Policy {
 
 fun JSONArray.objects(): List<JSONObject> = (0 until length()).mapNotNull { optJSONObject(it) }
 fun JSONObject.text(vararg keys: String): String = keys.firstNotNullOfOrNull { key -> opt(key)?.takeUnless { it == JSONObject.NULL }?.toString()?.takeIf(String::isNotBlank) }.orEmpty()
+internal fun JSONObject.userDisplayName(): String = text("name_show", "show_nickname", "user_nickname", "user_name", "name", "nick_name", "nick").trim()
+internal fun JSONObject.userPortrait(): String = text("portrait", "portrait_url", "portraith").trim()
 fun Thread.json() = JSONObject().put("id", id).put("title", title).put("forum", forum).put("author", JSONObject().put("id", author.id).put("name", author.name).put("portrait", author.portrait)).put("summary", summary).put("replies", replies).put("previews", JSONArray(previews)).put("likes", likes ?: JSONObject.NULL).put("forum-avatar", forumAvatar).put("timestamp", timestamp).put("collected", collected)
 fun threadFromJson(j: JSONObject): Thread {
     val u = j.optJSONObject("author") ?: JSONObject()

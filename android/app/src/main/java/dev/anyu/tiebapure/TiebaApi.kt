@@ -22,6 +22,7 @@ import tieba.PostOuterClass as PostProto
 import tieba.SubPostListOuterClass.SubPostList
 import tieba.pbPage.PbPageRequestOuterClass.*
 import tieba.pbPage.PbPageResponseOuterClass.PbPageResponse
+import tieba.pbPage.PbPageResponseOuterClass.PbPageResponseData
 import tieba.pbFloor.PbFloorRequestOuterClass.*
 import tieba.pbFloor.PbFloorResponseOuterClass.PbFloorResponse
 
@@ -105,13 +106,23 @@ class TiebaApi(private val clientId: String, private val screenWidth: Int = 1080
         validate(code ?: 0, j.text("error_msg", "error", "errmsg"))
         j.optJSONObject("error")?.let { validate(it.optInt("errno", 0), it.optString("errmsg")) }
     }
-    private fun user(u: UserProto.User) = User(u.id.toString(), u.nameShow.ifBlank { u.name }.ifBlank { "贴吧用户" }, u.portrait)
-    private fun thread(t: ThreadInfo): Thread = Thread((if (t.id != 0L) t.id else t.threadId).toString(), t.title, t.forumName.ifBlank { t.forumInfo.name }, user(t.author), t.getAbstractList().joinToString("") { it.text }, t.replyNum, t.mediaList.mapNotNull { Policy.mediaUrl(it.srcPic.ifBlank { it.bigPic }.replaceFirst("http://", "https://")) }.take(9), likes = (if (t.hasAgree()) t.agree.agreeNum else t.agreeNum.toLong()).coerceAtLeast(0), forumAvatar = t.forumInfo.avatar, timestamp = t.lastTimeInt.toLong().takeIf { it > 0 } ?: t.createTime.toLong(), collected = t.collectStatus == 1)
-    private fun content(list: List<PbContent>): List<Block> = list.map { b ->
-        if (b.type == 4 && b.uid > 0) return@map Block(4, b.text, "user:${b.uid}")
-        if (b.type == 1) return@map Block(1, b.text, Policy.webpage(b.link).orEmpty())
-        val raw = when (b.type) { 2 -> b.text.takeIf { it.matches(Regex("image_emoticon[1-9][0-9]{0,2}")) }?.let { "https://tb2.bdstatic.com/tb/editor/images/client/$it.png" }.orEmpty(); 3, 20 -> b.originSrc.ifBlank { b.bigCdnSrc }.ifBlank { b.cdnSrc }.ifBlank { b.bigSrc }.ifBlank { b.src }; 5 -> b.link.ifBlank { b.src }; 10 -> Policy.voice(b.voiceMD5).orEmpty(); else -> b.link }
-        Block(b.type, b.text.ifBlank { if (b.type == 2) "[表情]" else "" }, Policy.mediaUrl(raw.replaceFirst("http://", "https://")).orEmpty())
+    private fun user(u: UserProto.User) = User(u.id.toString(), u.nameShow.ifBlank { u.name }.ifBlank { "贴吧用户" }, u.portrait.ifBlank { u.portraith })
+    private fun thread(t: ThreadInfo): Thread = Thread((if (t.id != 0L) t.id else t.threadId).toString(), t.title, t.forumName.ifBlank { t.forumInfo.name }, user(t.author), TiebaEmoticon.summary(t.getAbstractList().flatMap { TiebaEmoticon.normalize(Block(it.type, it.text, it.src)) }), t.replyNum, t.mediaList.mapNotNull { Policy.mediaUrl(it.srcPic.ifBlank { it.bigPic }.replaceFirst("http://", "https://")) }.take(9), likes = (if (t.hasAgree()) t.agree.agreeNum else t.agreeNum.toLong()).coerceAtLeast(0), forumAvatar = t.forumInfo.avatar, timestamp = t.lastTimeInt.toLong().takeIf { it > 0 } ?: t.createTime.toLong(), collected = t.collectStatus == 1)
+    internal fun content(list: List<PbContent>): List<Block> {
+        val hasImages = list.any { it.type in setOf(3, 20) && listOf(it.originSrc, it.bigCdnSrc, it.cdnSrc, it.bigSrc, it.src).any { src -> Policy.mediaUrl(src.replaceFirst("http://", "https://")) != null } }
+        return list.flatMap { b ->
+            if (b.type == 4 && b.uid > 0) return@flatMap listOf(Block(4, b.text, "user:${b.uid}"))
+            if (b.type == 1) return@flatMap listOf(Block(1, b.text, Policy.webpage(b.link).orEmpty()))
+            val sources = listOf(b.originSrc, b.bigCdnSrc, b.cdnSrc, b.bigSrc, b.src)
+            val emoji = (if (b.type == 2) listOf(b.text, b.c).firstNotNullOfOrNull(TiebaEmoticon::imageName) else null)
+                ?: sources.firstNotNullOfOrNull(TiebaEmoticon::nameFromURL)
+            if (emoji != null && b.type in setOf(2, 3, 20)) return@flatMap listOf(Block(2, emoji, TiebaEmoticon.url(emoji).orEmpty()))
+            val raw = when (b.type) { 3, 20 -> sources.firstOrNull { it.isNotBlank() }.orEmpty(); 5 -> b.link.ifBlank { b.src }; 10 -> Policy.voice(b.voiceMD5).orEmpty(); else -> b.link }
+            val text = b.text.ifBlank { if (b.type == 2) b.c.ifBlank { "[表情]" } else "" }
+            // Upload markers accompany real photos; never discard a standalone user message.
+            val clean = if (hasImages && b.type in setOf(0, 9, 27)) text.replace(Regex("\\(?_ImageToUpload_\\)?"), "") else text
+            TiebaEmoticon.normalize(Block(b.type, clean, Policy.mediaUrl(raw.replaceFirst("http://", "https://")).orEmpty()))
+        }
     }
     private fun subpost(p: SubPostList): Post = Post(
         java.lang.Long.toUnsignedString(p.id), p.floor, user(p.author), content(p.contentList),
@@ -133,28 +144,45 @@ class TiebaApi(private val clientId: String, private val screenWidth: Int = 1080
         check(response.hasData()) { "未返回首页内容" }
         return response.data.threadListList.filter { it.isDeleted == 0 && !it.hasAlaInfo() && !it.hasTwzhiboInfo() }.map(::thread).filter { it.id != "0" }
     }
-    suspend fun forum(name: String, page: Int, sort: Int = 0, good: Boolean = false): List<Thread> {
+    private suspend fun forumResponse(name: String, page: Int, sort: Int, good: Boolean): JSONObject {
         require(name.isNotBlank() && name.length <= 100 && page > 0)
         val fields = mini() + mapOf("kw" to name, "pn" to "$page", "sort_type" to if (good) "-1" else "$sort", "q_type" to "2", "st_type" to "tb_forumlist", "with_group" to "0", "rn" to "20", "scr_w" to screenWidth.toString(), "scr_h" to screenHeight.toString(), "scr_dip" to screenScale.toString()) + if (good) mapOf("is_good" to "1", "cid" to "0") else emptyMap()
-        val j = form("$app/c/f/frs/page", fields, cookie = "ka=open"); validate(j)
-        val users = j.optJSONArray("user_list")?.objects().orEmpty().associateBy { it.text("id") }
-        return j.optJSONArray("thread_list")?.objects().orEmpty().filter { it.optInt("is_ad") == 0 && it.optInt("is_deleted") == 0 }.map { jsonThread(it, name, users) }
+        return form("$app/c/f/frs/page", fields, cookie = "ka=open").also { validate(it) }
     }
-    private fun jsonThread(j: JSONObject, forum: String = "", users: Map<String, JSONObject> = emptyMap()): Thread {
-        val author = j.optJSONObject("author") ?: users[j.text("author_id")] ?: JSONObject()
-        val abstracts = j.optJSONArray("abstract")?.objects()?.joinToString("") { it.optString("text") }.orEmpty()
-        return Thread(j.text("id", "tid", "thread_id"), j.text("title", "thread_title"), forum.ifBlank { j.text("forum_name", "fname") }, User(author.text("id", "uid"), author.text("name_show", "name", "nick").ifBlank { "贴吧用户" }, author.optString("portrait")), abstracts, j.optInt("reply_num"))
+    suspend fun forumInfo(name: String): ForumEntry = forumEntry(forumResponse(name, 1, 0, false).optJSONObject("forum") ?: JSONObject(), name)
+    suspend fun forum(name: String, page: Int, sort: Int = 0, good: Boolean = false): List<Thread> {
+        val j = forumResponse(name, page, sort, good)
+        val info = forumEntry(j.optJSONObject("forum") ?: JSONObject(), name)
+        val users = j.optJSONArray("user_list")?.objects().orEmpty().associateBy { it.text("id", "uid") }
+        return j.optJSONArray("thread_list")?.objects().orEmpty().filter { it.optInt("is_ad") == 0 && it.optInt("is_deleted") == 0 }.map { jsonThread(it, name, users).copy(forumAvatar = info.avatar) }
     }
+    internal fun jsonSummary(values: org.json.JSONArray?): String = TiebaEmoticon.summary(values?.objects().orEmpty().flatMap {
+        val type = it.optInt("type")
+        val code = if (type == 2) listOf(it.text("text"), it.text("c")).firstOrNull { candidate -> TiebaEmoticon.imageName(candidate) != null } ?: it.text("text", "c") else it.text("text")
+        TiebaEmoticon.normalize(Block(type, code, it.text("src", "url", "cdn_src")))
+    })
+    internal fun jsonThread(j: JSONObject, forum: String = "", users: Map<String, JSONObject> = emptyMap()): Thread {
+        val inline = j.optJSONObject("author") ?: JSONObject()
+        val uid = inline.text("id", "uid").ifBlank { j.text("author_id") }
+        val listed = users[uid] ?: JSONObject()
+        val author = User(uid, inline.userDisplayName().ifBlank { listed.userDisplayName() }.ifBlank { "贴吧用户" }, inline.userPortrait().ifBlank { listed.userPortrait() })
+        val abstracts = jsonSummary(j.optJSONArray("abstract"))
+        return Thread(j.text("id", "tid", "thread_id"), j.text("title", "thread_title"), forum.ifBlank { j.text("forum_name", "fname") }, author, abstracts, j.optInt("reply_num"))
+    }
+
     suspend fun thread(id: String, page: Int, account: Account?, descending: Boolean = false, onlyAuthor: Boolean = false, postId: String? = null, hot: Boolean = false): ThreadPage {
         val data = PbPageRequestData.newBuilder().setCommon(common(account)).setKz(Policy.signedId(id)).setPn(page).setR(if (hot) 2 else if (descending) 1 else 0).setLz(if (onlyAuthor) 1 else 0).setWithFloor(1).setFloorRn(4).setFloorSortType(1).setQType(2).setRn(15).setSourceType(2).setScrW(screenWidth).setScrH(screenHeight).setScrDip(screenScale)
         if (postId != null && page <= 1) data.setPid(Policy.signedId(postId)).setPn(0)
         val r = PbPageResponse.parseFrom(protobuf("$base/c/f/pb/page?cmd=302001&format=protobuf", PbPageRequest.newBuilder().setData(data).build(), account, true))
         validate(r.error.errorCode, r.error.userMsg.ifBlank { r.error.errorMsg }); check(r.hasData()) { "未返回帖子内容" }
-        val d = r.data
+        return threadPage(r.data)
+    }
+    internal fun threadPage(d: PbPageResponseData): ThreadPage {
         val users = d.userListList.associateBy { it.id }
         val rawPosts = d.postListList.toMutableList()
         if (d.hasFirstFloorPost() && d.firstFloorPost.id != 0L && rawPosts.none { it.id == d.firstFloorPost.id }) rawPosts.add(0, d.firstFloorPost)
-        val posts = rawPosts.filter { !it.hasAdvertisement() }.map { post(it, users) }
+        // Public PBPage also attaches this placeholder to ordinary floors, including thread 9107183498.
+        val posts = rawPosts.filter { !it.hasAdvertisement() || it.advertisement.advertisementId == "advertisement_test1" && it.id != 0L && it.floor > 0 }.map { post(it, users) }
         return ThreadPage(thread(d.thread).copy(forum = d.forum.name, forumAvatar = d.forum.avatar.ifBlank { d.thread.forumInfo.avatar }), d.forum.id.toString(), posts, d.page.currentPage.coerceAtLeast(1), d.page.totalPage.coerceAtLeast(1))
     }
     suspend fun subposts(tid: String, pid: String, fid: String, page: Int, account: Account?): List<Post> {
@@ -171,7 +199,7 @@ class TiebaApi(private val clientId: String, private val screenWidth: Int = 1080
             val info = row.optJSONObject("thread_info") ?: row
             val author = row.optJSONObject("user") ?: row.optJSONObject("user_info") ?: JSONObject()
             val f = row.optJSONObject("forum_info") ?: JSONObject()
-            Thread(info.text("tid", "thread_id", "id"), info.text("title", "thread_title"), f.text("forum_name", "name").ifBlank { row.text("forum_name") }, User(author.text("user_id", "id"), author.text("show_nickname", "user_name").ifBlank { "贴吧用户" }, author.text("portrait")), row.optJSONArray("content")?.objects()?.joinToString("") { it.optString("text") }.orEmpty(), matchedPost = row.text("pid").takeIf { it.toLongOrNull()?.let { value -> value > 0 } == true }.orEmpty())
+            Thread(info.text("tid", "thread_id", "id"), info.text("title", "thread_title"), f.text("forum_name", "name").ifBlank { row.text("forum_name") }, User(author.text("user_id", "id"), author.text("show_nickname", "user_name").ifBlank { "贴吧用户" }, author.text("portrait")), jsonSummary(row.optJSONArray("content")), matchedPost = row.text("pid").takeIf { it.toLongOrNull()?.let { value -> value > 0 } == true }.orEmpty())
         }.filter { it.id.toLongOrNull()?.let { n -> n > 0 } == true }
     }
     suspend fun login(bduss: String, stoken: String): Account {
@@ -180,17 +208,17 @@ class TiebaApi(private val clientId: String, private val screenWidth: Int = 1080
         val user = client?.optJSONObject("user")
         val clientTbs = client?.optJSONObject("anti")?.text("tbs").orEmpty()
         if (user != null && user.text("id").toLongOrNull()?.let { it > 0 } == true && clientTbs.isNotBlank()) {
-            return Account.parse(JSONObject().put("uid", user.text("id")).put("name", user.text("name_show", "name")).put("bduss", bduss).put("stoken", stoken).put("tbs", clientTbs).put("portrait", user.text("portrait")))
+            return Account.parse(JSONObject().put("uid", user.text("id")).put("name", user.userDisplayName()).put("bduss", bduss).put("stoken", stoken).put("tbs", clientTbs).put("portrait", user.userPortrait()))
         }
         val j = get("$base/mo/q/newmoindex", mapOf("need_user" to "1"), "BDUSS=$bduss; STOKEN=$stoken")
         val d = j.optJSONObject("data") ?: error("未取得账号资料")
         check(d.text("is_login").lowercase() !in setOf("0", "false")) { "百度未确认登录状态，请重新登录" }
         val tbs = d.text("tbs", "itb_tbs")
-        return Account.parse(JSONObject().put("uid", d.text("uid", "id")).put("name", d.text("name_show", "name")).put("bduss", bduss).put("stoken", stoken).put("tbs", tbs).put("portrait", d.text("portrait")))
+        return Account.parse(JSONObject().put("uid", d.text("uid", "id")).put("name", d.userDisplayName()).put("bduss", bduss).put("stoken", stoken).put("tbs", tbs).put("portrait", d.userPortrait()))
     }
-    suspend fun followedForums(a: Account): List<Pair<String, String>> {
+    suspend fun followedForums(a: Account): List<ForumEntry> {
         val j = form("$app/c/f/forum/getforumlist", mapOf("BDUSS" to a.bduss, "stoken" to a.stoken, "user_id" to a.uid, "_client_version" to "11.10.8.6"), false); validate(j)
-        return j.optJSONArray("forum_info")?.objects().orEmpty().map { it.text("forum_id") to it.text("forum_name") }
+        return j.optJSONArray("forum_info")?.objects().orEmpty().map { forumEntry(it) }.filter { it.name.isNotBlank() }
     }
     private suspend fun tbs(a: Account): String {
         val token = try { clientLogin(a.bduss, a.stoken).optJSONObject("anti")?.text("tbs") } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: SessionExpired) { throw e } catch (e: Exception) { null }
@@ -249,12 +277,12 @@ class TiebaApi(private val clientId: String, private val screenWidth: Int = 1080
         validate(r.error.errorCode, r.error.userMsg.ifBlank { r.error.errorMsg })
         check(r.hasData()) { "未返回用户主题" }
         check(r.data.hidePost == 0) { "用户设置了主题隐私" }
-        return r.data.postListList.map { Thread(java.lang.Long.toUnsignedString(it.threadId), it.title, it.forumName, User(it.userId.toString(), it.nameShow.ifBlank { it.userName }, it.userPortrait), it.contentThread.ifBlank { it.abstractThreadList.joinToString("") { p -> p.text } }, it.replyNum) }
+        return r.data.postListList.map { Thread(java.lang.Long.toUnsignedString(it.threadId), it.title, it.forumName, User(it.userId.toString(), it.nameShow.ifBlank { it.userName }, it.userPortrait), it.contentThread.ifBlank { TiebaEmoticon.summary(it.abstractThreadList.flatMap { p -> TiebaEmoticon.normalize(Block(p.type, p.text, p.src)) }) }, it.replyNum) }
     }
     suspend fun relationships(uid: String, a: Account?, followers: Boolean, page: Int): List<User> {
         Policy.signedId(uid); require(page > 0)
         val j = form("$social/c/u/${if (followers) "fans/page" else "follow/followList"}", mapOf("BDUSS" to a?.bduss.orEmpty(), "_client_version" to "22.5.1.0", "uid" to uid, "pn" to "$page")); validate(j)
-        return (j.optJSONArray(if (followers) "user_list" else "follow_list") ?: JSONArray()).objects().map { User(it.text("id"), it.text("name_show", "name"), it.text("portrait").substringBefore('?')) }
+        return (j.optJSONArray(if (followers) "user_list" else "follow_list") ?: JSONArray()).objects().map { User(it.text("id"), it.userDisplayName().ifBlank { "贴吧用户" }, it.userPortrait().substringBefore('?')) }
     }
     suspend fun followUser(a: Account, portrait: String, follow: Boolean) {
         require(portrait.isNotBlank() && portrait.length <= 1024)
@@ -282,6 +310,15 @@ class TiebaApi(private val clientId: String, private val screenWidth: Int = 1080
         val token = tbs(a)
         val fields = officialFields("12.25.1.0") + mapOf("BDUSS" to a.bduss, "delete_my_thread" to "1", "fid" to page.forumId, "is_frs_mask" to "0", "is_vipdel" to "0", "src" to "1", "tbs" to token, "word" to page.thread.forum, "z" to page.thread.id)
         val j = try { form("$app/c/c/bawu/delthread", fields, headers = mapOf("User-Agent" to "bdtb for Android 12.25.1.0")) } catch (e: Exception) { throw OutcomeUnknown() }
+        SubmissionPolicy.modifiedProfile(j)
+    }
+    suspend fun deleteOwnComment(a: Account, tid: String, fid: String, forum: String, post: Post, subpost: Boolean) {
+        require(a.uid.toLongOrNull()?.let { it > 0 } == true && post.author.id == a.uid) { "只能删除本人发布的评论" }
+        require(subpost || post.floor > 1) { "主楼请使用删除主题" }
+        Policy.signedId(tid); Policy.signedId(fid); Policy.signedId(post.id)
+        require(forum.isNotBlank() && forum.length <= 100) { "缺少贴吧信息，无法删除评论" }
+        val fields = officialFields("12.25.1.0") + mapOf("BDUSS" to a.bduss, "delete_my_post" to "1", "fid" to fid, "word" to forum, "z" to tid, "pid" to post.id, "isfloor" to "0", "src" to "1", "is_vipdel" to "0", "tbs" to tbs(a))
+        val j = try { form("$app/c/c/bawu/delpost", fields, headers = mapOf("User-Agent" to "bdtb for Android 12.25.1.0")) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { throw OutcomeUnknown() }
         SubmissionPolicy.modifiedProfile(j)
     }
     private suspend fun postingTbs(a: Account): String {

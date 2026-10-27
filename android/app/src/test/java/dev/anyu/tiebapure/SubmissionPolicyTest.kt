@@ -19,6 +19,10 @@ class SubmissionPolicyTest {
         assertTrue(e is ChallengeRequired)
     }
     @Test fun explicitRefusalAndProfileStatusAreDistinctFromUnknownOutcome() {
+        val rejected = runCatching { SubmissionPolicy.receipt(JSONObject("{\"no\":401,\"error\":\"内容不能为空\",\"data\":{\"tid\":0,\"pid\":0}}"), "42") }.exceptionOrNull()
+        assertTrue(rejected is SubmissionRejected)
+        assertEquals("内容不能为空", rejected?.message)
+        assertTrue(runCatching { SubmissionPolicy.receipt(JSONObject("{\"no\":40,\"error\":\"请完成安全验证\",\"data\":{\"tid\":0,\"pid\":0}}"), "42") }.exceptionOrNull() is ChallengeRequired)
         assertTrue(runCatching { SubmissionPolicy.receipt(JSONObject("{\"result\":0,\"error_msg\":\"拒绝\"}"), null) }.exceptionOrNull() is SubmissionRejected)
         SubmissionPolicy.modifiedProfile(JSONObject("{\"error_code\":0}"))
         assertTrue(runCatching { SubmissionPolicy.modifiedProfile(JSONObject("{\"result\":0,\"data\":{\"errno\":1}}")) }.exceptionOrNull() is OutcomeUnknown)

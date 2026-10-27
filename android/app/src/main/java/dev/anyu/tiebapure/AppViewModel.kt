@@ -7,11 +7,13 @@ import androidx.compose.runtime.*
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
-data class ScreenData(val threads: List<Thread> = emptyList(), val thread: ThreadPage? = null, val posts: List<Post> = emptyList(), val forums: List<Pair<String, String>> = emptyList(), val profile: Profile? = null, val users: List<User> = emptyList(), val hasMore: Boolean = false)
+data class ScreenData(val threads: List<Thread> = emptyList(), val thread: ThreadPage? = null, val posts: List<Post> = emptyList(), val forums: List<ForumEntry> = emptyList(), val profile: Profile? = null, val users: List<User> = emptyList(), val hasMore: Boolean = false)
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     val store = LocalStore(app)
@@ -21,6 +23,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         android.os.Build.VERSION.RELEASE, android.os.Build.MODEL, android.os.Build.MANUFACTURER
     )
     val offline = OfflineLibrary(app, api, store)
+    val forumAvatars = mutableStateMapOf<String, String>()
+    private val forumAvatarPermits = Semaphore(3)
+    suspend fun ensureForumAvatar(name: String) {
+        if (name.isBlank() || forumAvatars.containsKey(name)) return
+        try {
+            forumAvatarPermits.withPermit {
+                if (!forumAvatars.containsKey(name)) {
+                    val info = withContext(Dispatchers.IO) { api.forumInfo(name) }
+                    val avatar = Policy.avatar(info.avatar) ?: return@withPermit
+                    forumAvatars[name] = avatar
+                    withContext(Dispatchers.IO) { store.updateForumMetadata(name, info) }
+                }
+            }
+        } catch (e: CancellationException) { throw e }
+        catch (_: Exception) { /* Keep the initial visible; a later visit retries. */ }
+    }
     val fontStore = FontStore(app)
     var readerTypeface by mutableStateOf(fontStore.typeface(fontStore.selected())); private set
     var fonts by mutableStateOf(fontStore.list()); private set
@@ -53,7 +71,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var fontSize by mutableFloatStateOf(store.prefs.getFloat("font-size", 17f))
     var manualMedia by mutableStateOf(store.prefs.getBoolean("manual-media", false))
     var newThreadsEnabled by mutableStateOf(store.prefs.getBoolean("allow-new-threads", true)); private set
-    var repliesEnabled by mutableStateOf(store.prefs.getBoolean("allow-replies", false)); private set
+    var repliesEnabled by mutableStateOf(store.prefs.getBoolean("allow-replies", true)); private set
     var likesEnabled by mutableStateOf(store.prefs.getBoolean("allow-likes", true)); private set
     fun setContentPreferences(newThreads: Boolean = newThreadsEnabled, replies: Boolean = repliesEnabled, likes: Boolean = likesEnabled) {
         store.prefs.edit().putBoolean("allow-new-threads", newThreads).putBoolean("allow-replies", replies).putBoolean("allow-likes", likes).apply()
@@ -80,10 +98,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun clearNotice() { notice = "" }
     fun navigate(next: Route, root: Boolean = false) {
         if (route.kind == "home" && (!loading || data.threads.isNotEmpty())) homeSnapshot = HomeSnapshot(data, page, error, retryPage, retryAppend)
-        if (next.kind == "forum" && next.id.trim().length in 1..100) store.put("forum", next.id, JSONObject().put("name", next.id))
+        if (next.kind == "forum" && next.id.trim().length in 1..100) store.put("forum", next.id, (store.get("forum", next.id) ?: JSONObject()).put("name", next.id))
         if (next.kind == "thread" && data.threads.isNotEmpty()) contextThreads = data.threads
         if (root) contextThreads = emptyList()
         if (root) stack.clear() else if (!(route.kind in setOf("search", "searchinput") && next.kind in setOf("search", "searchinput"))) stack.add(route)
+        showRoute(next)
+    }
+    private fun showRoute(next: Route) {
         route = next
         if (next.kind == "home") homeSnapshot?.let { cached ->
             loadJob?.cancel(); generation++
@@ -93,15 +114,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         page = if (next.kind == "thread" && next.extra.isBlank()) store.get("position", next.id)?.optInt("page", 1)?.coerceAtLeast(1) ?: 1 else 1
-        sort = if (next.kind == "thread" && next.extra.isBlank() && store.get("position", next.id) == null) defaultReplySort else 0
+        sort = if (next.kind == "forum" && next.extra == "publish") 1 else if (next.kind == "thread" && next.extra.isBlank() && store.get("position", next.id) == null) defaultReplySort else 0
         onlyAuthor = false
         data = ScreenData()
         load()
     }
     fun back(): Boolean {
         if (stack.isEmpty()) return false
-        route = stack.removeAt(stack.lastIndex)
-        data = ScreenData(); page = 1; sort = 0; onlyAuthor = false; load(); return true
+        showRoute(stack.removeAt(stack.lastIndex))
+        return true
+    }
+    fun selectForumCategory(value: Int) {
+        require(value in -1..1)
+        if (route.kind != "forum") return
+        val extra = when (value) { -1 -> "good"; 1 -> "publish"; else -> "" }
+        if (route.extra == extra) return
+        route = route.copy(extra = extra)
+        sort = if (value == 1) 1 else 0
+        page = 1; data = ScreenData()
+        load(1)
     }
     fun load(requestedPage: Int = page, append: Boolean = false) {
         loadJob?.cancel()
@@ -115,7 +146,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val result = withContext(Dispatchers.IO) {
                     when (r.kind) {
                         "home" -> ScreenData(threads = api.home(a, requestedPage))
-                        "forum" -> ScreenData(threads = api.forum(r.id, requestedPage, order, r.extra == "good"))
+                        "forum" -> ScreenData(threads = api.forum(r.id, requestedPage, if (r.extra == "publish") 1 else 0, r.extra == "good"))
                         "search" -> ScreenData(threads = api.search(r.id, requestedPage, r.extra))
                         "thread" -> {
                             val p = api.thread(r.id, requestedPage, a, order == 1, lz, r.extra.takeIf(String::isNotBlank), hot = order == 2)
@@ -127,13 +158,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         }
                         "subposts" -> api.subposts(r.id, r.extra.substringBefore(':'), r.extra.substringAfter(':'), requestedPage, a).let { ScreenData(posts = it, hasMore = it.size >= 10) }
                         "forums" -> {
-                            val local = store.list("forum").map { it.first to it.second.getString("name") }
-                            val followed = if (a != null) api.followedForums(a) else emptyList()
-                            ScreenData(forums = followed + local.filterNot { pair -> followed.any { it.second == pair.second } })
+                            ScreenData(forums = if (a != null) api.followedForums(a) else emptyList())
                         }
                         "history", "saved" -> ScreenData(threads = store.list(r.kind).map { threadFromJson(it.second) })
                         "favorites" -> ScreenData(threads = api.favorites(a ?: error("请先登录"), requestedPage))
                         "messages" -> ScreenData(threads = api.messages(a ?: error("请先登录"), r.extra == "at", requestedPage))
+                        "me" -> if (a == null) ScreenData() else ScreenData(profile = api.profile(a.uid, a))
                         "profile", "editprofile" -> ScreenData(profile = api.profile(r.id, a))
                         "userthreads" -> ScreenData(threads = api.userThreads(r.id, a, requestedPage))
                         "following", "followers" -> ScreenData(users = api.relationships(r.id, a, r.kind == "followers", requestedPage))
@@ -148,6 +178,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
                 if (current == generation) {
+                    if (r.kind == "me" && a != null && a.sessionMatches(account)) result.profile?.let { account = a.withIdentity(it.user) }
+                    result.threads.filter { it.forum.isNotBlank() }.forEach { thread -> Policy.avatar(thread.forumAvatar)?.let { forumAvatars[thread.forum] = it } }
+                    if (r.kind == "forum") result.threads.firstOrNull()?.let { thread ->
+                        if (thread.forumAvatar.isNotBlank()) store.updateForumMetadata(r.id, ForumEntry("", r.id, thread.forumAvatar))
+                    }
                     val incomingPostPages = result.posts.associate { it.id to (result.thread?.page ?: requestedPage) }
                     postPages = if (append) incomingPostPages + postPages else incomingPostPages
                     data = if (append) result.appendTo(data) else result
@@ -291,6 +326,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             "签到完成：$success 个成功，$failed 个失败"
           } finally { withContext(NonCancellable + Dispatchers.Main) { signing = false } }
         }
+    }
+
+    fun removeDeletedComment(id: String, from: Route) {
+        if (route != from) return
+        fun remove(posts: List<Post>) = posts.filterNot { it.id == id }.map { p -> p.copy(children = p.children.filterNot { it.id == id }) }
+        data = data.copy(posts = remove(data.posts), thread = data.thread?.let { it.copy(posts = remove(it.posts)) })
     }
 
     fun compose(forum: String, tid: String? = null, pid: String? = null, floor: Int = 1, subpost: String? = null, replyTo: String = "") {

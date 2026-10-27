@@ -1,6 +1,11 @@
 import SwiftUI
 
 enum ReaderDateText {
+    enum ThreadMetadataFormat {
+        case compact
+        case mainPost
+        case subpost
+    }
     static func string(from date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
         let elapsed = max(now.timeIntervalSince(date), 0)
         if elapsed < 60 {
@@ -25,8 +30,14 @@ enum ReaderDateText {
     static func threadMetadataString(
         from date: Date,
         now: Date = Date(),
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        format: ThreadMetadataFormat = .compact
     ) -> String {
+        if format != .compact {
+            var gregorian = Calendar(identifier: .gregorian)
+            gregorian.timeZone = calendar.timeZone
+            return formatted(date, pattern: format == .mainPost ? "HH:mm:ss'「'yyyy-MM-dd'」'" : "HH:mm'「'MM-dd'」'", calendar: gregorian, localeIdentifier: "en_US_POSIX")
+        }
         let elapsed = max(now.timeIntervalSince(date), 0)
         if elapsed < 3_600 || calendar.isDate(date, inSameDayAs: now) {
             return string(from: date, now: now, calendar: calendar)
@@ -44,18 +55,18 @@ enum ReaderDateText {
     private static let formatterCacheLock = NSLock()
     private static var formatterCache: [String: DateFormatter] = [:]
 
-    private static func formatted(_ date: Date, pattern: String, calendar: Calendar) -> String {
+    private static func formatted(_ date: Date, pattern: String, calendar: Calendar, localeIdentifier: String = "zh_CN") -> String {
         // DateFormatter creation is expensive and runs per visible list row.
         // Cached instances are never mutated after insertion, and formatting
         // itself is thread-safe on iOS 7+, so only the cache needs the lock.
-        let key = "\(pattern)|\(calendar.identifier)|\(calendar.timeZone.identifier)"
+        let key = "\(pattern)|\(calendar.identifier)|\(calendar.timeZone.identifier)|\(localeIdentifier)"
         formatterCacheLock.lock()
         let formatter: DateFormatter
         if let cached = formatterCache[key] {
             formatter = cached
         } else {
             let created = DateFormatter()
-            created.locale = Locale(identifier: "zh_CN")
+            created.locale = Locale(identifier: localeIdentifier)
             created.calendar = calendar
             created.timeZone = calendar.timeZone
             created.dateFormat = pattern

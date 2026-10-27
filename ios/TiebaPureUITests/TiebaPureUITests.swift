@@ -790,6 +790,7 @@ final class TiebaPureUITests: XCTestCase {
 
         let mainLikeButton = app.buttons["thread-main-like-button"]
         XCTAssertTrue(mainLikeButton.waitForExistence(timeout: 8))
+        XCTAssertFalse(app.buttons["thread-main-comment-button"].exists)
         XCTAssertEqual(mainLikeButton.label, "点赞")
         XCTAssertTrue(mainLikeButton.value as? String == "当前12个赞")
         mainLikeButton.tap()
@@ -797,6 +798,7 @@ final class TiebaPureUITests: XCTestCase {
 
         XCTAssertTrue(waitForElement(named: "thread-like-button-2002", in: app, maxSwipes: 12))
         let replyLikeButton = app.buttons["thread-like-button-2002"]
+        XCTAssertFalse(app.buttons["thread-comment-button-2002"].exists)
         XCTAssertEqual(replyLikeButton.label, "点赞")
         replyLikeButton.tap()
         XCTAssertTrue(waitForLikeState(replyLikeButton, label: "取消点赞", count: 4))
@@ -807,10 +809,12 @@ final class TiebaPureUITests: XCTestCase {
 
         let parentLikeButton = app.buttons["thread-subpost-parent-like-button"]
         XCTAssertTrue(parentLikeButton.waitForExistence(timeout: 8))
+        XCTAssertFalse(app.buttons["thread-subpost-parent-comment-button"].exists)
         XCTAssertTrue(waitForLikeState(parentLikeButton, label: "取消点赞", count: 4))
 
         XCTAssertTrue(waitForElement(named: "thread-subpost-like-button-3051", in: app, maxSwipes: 8))
         let subpostLikeButton = app.buttons["thread-subpost-like-button-3051"]
+        XCTAssertFalse(app.buttons["thread-subpost-comment-button-3051"].exists)
         XCTAssertEqual(subpostLikeButton.label, "点赞")
         subpostLikeButton.tap()
         XCTAssertTrue(waitForLikeState(subpostLikeButton, label: "取消点赞", count: 1))
@@ -1029,7 +1033,79 @@ final class TiebaPureUITests: XCTestCase {
         )
     }
 
-    func testReplySettingDefaultsOffEnablesRepliesAndPersistsAcrossRelaunch() {
+    func testOnlyMetadataReplyButtonsRemainAndOpenTheCorrectComposers() {
+        let app = launchApp(scenario: "subpostReference", account: "loggedIn", additionalArguments: ["UITEST_RESET_CONTENT_SUBMISSION_RISK"])
+        openFirstThread(in: app)
+        XCTAssertFalse(app.buttons["thread-main-comment-button"].exists)
+        let main = app.buttons["thread-reply-button-2001"]
+        XCTAssertTrue(waitForElement(named: "thread-reply-button-2001", in: app, maxSwipes: 12))
+        XCTAssertTrue(main.isEnabled)
+        main.tap()
+        let risk = app.alerts["实验性发布功能"]
+        XCTAssertTrue(risk.waitForExistence(timeout: 8))
+        risk.buttons["了解并继续"].tap()
+        assertReplyComposer(navigationTitle: "回复用户", prompt: "回复 合成内容作者", in: app)
+        app.navigationBars["回复用户"].buttons["取消"].tap()
+
+        XCTAssertTrue(waitForElement(named: "thread-reply-button-2002", in: app, maxSwipes: 12))
+        app.buttons["thread-reply-button-2002"].tap()
+        assertReplyComposer(navigationTitle: "回复用户", prompt: "回复 很长很长的合成回复用户名用于布局测试", in: app)
+        app.navigationBars["回复用户"].buttons["取消"].tap()
+
+        XCTAssertTrue(waitForElement(named: "查看全部4条回复", in: app, maxSwipes: 12))
+        app.buttons["查看全部4条回复"].tap()
+        XCTAssertFalse(app.buttons["thread-subpost-parent-comment-button"].exists)
+        let parent = app.buttons["subposts-compose-reply-button"]
+        XCTAssertTrue(parent.waitForExistence(timeout: 8))
+        parent.tap()
+        assertReplyComposer(navigationTitle: "回复用户", prompt: "回复 很长很长的合成回复用户名用于布局测试", in: app)
+        app.navigationBars["回复用户"].buttons["取消"].tap()
+
+        XCTAssertTrue(waitForElement(named: "subpost-reply-button-3051", in: app, maxSwipes: 8))
+        XCTAssertFalse(app.buttons["thread-subpost-comment-button-3051"].exists)
+        app.buttons["subpost-reply-button-3051"].tap()
+        assertReplyComposer(navigationTitle: "回复用户", prompt: "回复 合成内容作者", in: app)
+    }
+
+    func testOwnCommentsCanBeDeletedWithConfirmation() {
+        let app = launchApp(scenario: "subpostReference", account: "loggedIn", additionalArguments: ["UITEST_RESET_CONTENT_SUBMISSION"])
+        openFirstThread(in: app)
+        let reply = app.buttons["thread-compose-reply-button"]
+        XCTAssertTrue(reply.waitForExistence(timeout: 8))
+        reply.tap()
+        let risk = app.alerts["实验性发布功能"]
+        XCTAssertTrue(risk.waitForExistence(timeout: 8))
+        risk.buttons["了解并继续"].tap()
+        let body = app.textViews["正文内容"]
+        XCTAssertTrue(body.waitForExistence(timeout: 8))
+        body.tap()
+        body.typeText("普通评论删除验证")
+        app.buttons["发送"].tap()
+        XCTAssertTrue(app.navigationBars["回复帖子"].waitForNonExistence(timeout: 10))
+        XCTAssertTrue(waitForElement(named: "delete-comment-19001", in: app, maxSwipes: 12))
+        let delete = app.buttons["delete-comment-19001"]
+        delete.tap()
+        app.buttons["取消"].tap()
+        XCTAssertTrue(delete.exists)
+        delete.tap()
+        app.buttons["确认删除"].tap()
+        XCTAssertTrue(delete.waitForNonExistence(timeout: 8))
+
+        XCTAssertTrue(waitForElement(named: "thread-reply-button-2002", in: app, maxSwipes: 12))
+        app.buttons["thread-reply-button-2002"].tap()
+        XCTAssertTrue(body.waitForExistence(timeout: 8))
+        body.tap()
+        body.typeText("楼中楼删除验证")
+        app.buttons["发送"].tap()
+        XCTAssertTrue(app.navigationBars["回复用户"].waitForNonExistence(timeout: 10))
+        XCTAssertTrue(waitForElement(named: "delete-comment-19002", in: app, maxSwipes: 12))
+        let deleteSubpost = app.buttons["delete-comment-19002"]
+        deleteSubpost.tap()
+        app.buttons["确认删除"].tap()
+        XCTAssertTrue(deleteSubpost.waitForNonExistence(timeout: 8))
+    }
+
+    func testReplySettingDefaultsOnAndExplicitDisablePersistsAcrossRelaunch() {
         var app = launchApp(
             account: "loggedIn",
             additionalArguments: ["UITEST_RESET_CONTENT_SUBMISSION_RISK"]
@@ -1043,9 +1119,9 @@ final class TiebaPureUITests: XCTestCase {
 
         let repliesToggle = app.switches["settings-replies-enabled-toggle"]
         XCTAssertTrue(repliesToggle.waitForExistence(timeout: 5))
-        XCTAssertEqual(repliesToggle.value as? String, "0", "回帖设置必须默认关闭")
+        XCTAssertEqual(repliesToggle.value as? String, "1", "回帖入口必须默认可用")
         repliesToggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
-        XCTAssertTrue(waitForSwitch(repliesToggle, value: "1"))
+        XCTAssertTrue(waitForSwitch(repliesToggle, value: "0"))
 
         app.terminate()
         app = launchApp(
@@ -1060,7 +1136,7 @@ final class TiebaPureUITests: XCTestCase {
 
         let persistedToggle = app.switches["settings-replies-enabled-toggle"]
         XCTAssertTrue(persistedToggle.waitForExistence(timeout: 5))
-        XCTAssertEqual(persistedToggle.value as? String, "1", "重启后应保留已开启的回帖设置")
+        XCTAssertEqual(persistedToggle.value as? String, "0", "重启后应保留主动关闭的回帖设置")
     }
 
     func testDisabledPostingAndLikesHideWriteActionsButKeepEveryLikeCount() {

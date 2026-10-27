@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.layer.*
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.layout.*
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -30,8 +31,10 @@ object IOSLayout {
     val background = Color(0xfff2f2f7)
     val barWidth = 280.dp
     val barHeight = 62.dp
-    val navigationHeight = 44.dp
-    val cardRadius = 8.dp
+    val navigationHeight = 56.dp
+    val cardRadius = 24.dp
+    val groupRadius = 26.dp
+    val innerRadius = 16.dp
     val cardGap = 12.dp
     val feedInset = 12.dp
     val cardInset = 16.dp
@@ -40,6 +43,9 @@ object IOSLayout {
     const val saturation = 1.2f
 }
 
+internal data class AnyuBackdrop(val layer: GraphicsLayer, val origin: Offset)
+internal val LocalAnyuBackdrop = staticCompositionLocalOf<AnyuBackdrop?> { null }
+
 /** Anyu src/index.css .auth-shell--glass: blur(20px) saturate(120%), tint .42, highlight .16. */
 @Composable fun AnyuFrostedSurface(
     backdrop: GraphicsLayer,
@@ -47,6 +53,7 @@ object IOSLayout {
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(50),
     floating: Boolean = true,
+    tintOverride: Color? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
     var position by remember { mutableStateOf(Offset.Zero) }
@@ -62,23 +69,25 @@ object IOSLayout {
         } else null
     }
     // shortcut: API26–30 use a solid frost tint; GPU backdrop blur requires API31.
-    val tint = if (effect == null) MaterialTheme.colorScheme.surface else if (dark) Color(0xff080f16).copy(alpha = 0.72f) else Color.White.copy(alpha = 0.42f)
-    Box(modifier.then(if (floating) Modifier.shadow(12.dp, shape, ambientColor = Color.Black.copy(alpha = 0.18f), spotColor = Color.Black.copy(alpha = 0.18f)) else Modifier).clip(shape).onGloballyPositioned { position = it.positionInRoot() }) {
-        if (effect != null) Canvas(Modifier.matchParentSize().graphicsLayer { renderEffect = effect }) {
+    val tint = if (effect == null) (tintOverride ?: MaterialTheme.colorScheme.surface).copy(alpha = 1f) else tintOverride ?: if (dark) Color(0xff080f16).copy(alpha = 0.72f) else Color.White.copy(alpha = 0.42f)
+    Box(modifier.then(if (floating) Modifier.shadow(12.dp, shape, ambientColor = Color.Black.copy(alpha = 0.18f), spotColor = Color.Black.copy(alpha = 0.18f)) else Modifier).then(if (floating) Modifier.clip(shape) else Modifier).onGloballyPositioned { val screen = it.localToScreen(Offset.Zero); if (screen.x.isFinite() && screen.y.isFinite()) position = screen }) {
+        if (effect != null) Canvas(Modifier.matchParentSize().clip(shape).graphicsLayer { renderEffect = effect }) {
             translate(origin.x - position.x, origin.y - position.y) { drawLayer(backdrop) }
         }
-        Box(Modifier.matchParentSize().background(tint))
+        Box(Modifier.matchParentSize().background(tint, shape))
         if (floating) Box(Modifier.matchParentSize().border(0.5.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.45f), Color.White.copy(alpha = 0.05f), Color.White.copy(alpha = 0.15f))), shape))
         content()
     }
 }
 
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable fun FrostedAppShell(
     title: String,
     root: String,
     showTabs: Boolean,
     showBack: Boolean,
     showSearch: Boolean,
+    hasActions: Boolean,
     onBack: () -> Unit,
     onSearch: () -> Unit,
     onTab: (String) -> Unit,
@@ -86,31 +95,46 @@ object IOSLayout {
     snackbar: @Composable () -> Unit,
     titleContent: (@Composable () -> Unit)? = null,
     feedback: @Composable () -> Unit = {},
+    startAlignedTitle: Boolean = false,
+    titleTrailingInset: Dp = 96.dp,
     content: @Composable (PaddingValues) -> Unit
 ) {
     val layer = rememberGraphicsLayer()
     var origin by remember { mutableStateOf(Offset.Zero) }
     val status = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val bottom = maxOf(WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(), WindowInsets.ime.asPaddingValues().calculateBottomPadding())
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        Box(Modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInRoot() }.drawWithContent {
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val toolbarButtonTint = (if (dark) Color(0xff080f16) else Color.White).copy(alpha = 0.9f)
+    val navigationHeight = IOSLayout.navigationHeight
+    CompositionLocalProvider(LocalAnyuBackdrop provides AnyuBackdrop(layer, origin)) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).semantics { testTagsAsResourceId = true }) {
+        Box(Modifier.fillMaxSize().onGloballyPositioned { val screen = it.localToScreen(Offset.Zero); if (screen.x.isFinite() && screen.y.isFinite()) origin = screen }.drawWithContent {
             layer.record { this@drawWithContent.drawContent() }
             drawLayer(layer)
         }) {
-            content(PaddingValues(top = status + IOSLayout.navigationHeight, bottom = if (showTabs) maxOf(IOSLayout.scrollClearance, bottom + IOSLayout.barHeight + 16.dp) else bottom + 12.dp))
+            content(PaddingValues(top = status + navigationHeight, bottom = if (showTabs) maxOf(IOSLayout.scrollClearance, bottom + IOSLayout.barHeight + 16.dp) else bottom + 12.dp))
         }
-        AnyuFrostedSurface(layer, origin, Modifier.fillMaxWidth(), RoundedCornerShape(0.dp), floating = false) {
-            Box(Modifier.fillMaxWidth().height(status + IOSLayout.navigationHeight).padding(top = status)) {
-                if (titleContent == null) Text(title, Modifier.align(Alignment.Center).padding(horizontal = if (showBack) 96.dp else 64.dp), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                else Box(Modifier.align(Alignment.CenterStart).padding(start = 56.dp, end = 156.dp)) { titleContent() }
-                if (showBack) IconButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart).padding(start = 8.dp).size(44.dp).background(MaterialTheme.colorScheme.surface.copy(alpha = 0.35f), CircleShape)) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回", modifier = Modifier.size(22.dp)) }
-                Row(Modifier.align(Alignment.CenterEnd).padding(end = 12.dp).background(if (titleContent != null) MaterialTheme.colorScheme.surface.copy(alpha = 0.35f) else Color.Transparent, CircleShape), verticalAlignment = Alignment.CenterVertically) {
-                    if (showSearch) IconButton(onClick = onSearch, modifier = Modifier.size(44.dp).background(if (titleContent == null) MaterialTheme.colorScheme.surface.copy(alpha = 0.35f) else Color.Transparent, CircleShape)) { Icon(Icons.Default.Search, "搜索", modifier = Modifier.size(22.dp)) }
-                    actions()
+        AnyuFrostedSurface(layer, origin, Modifier.fillMaxWidth().testTag("top-frosted-bar"), RoundedCornerShape(0.dp), floating = false, tintOverride = MaterialTheme.colorScheme.background.copy(alpha = if (dark) 0.72f else 0.42f)) {
+            Box(Modifier.fillMaxWidth().height(status + navigationHeight).padding(top = status, bottom = 4.dp)) {
+                if (titleContent == null) Text(title, if (startAlignedTitle) Modifier.align(Alignment.CenterStart).padding(start = 52.dp, end = titleTrailingInset).testTag("forum-title") else Modifier.align(Alignment.Center).padding(horizontal = if (showBack) 96.dp else 64.dp).testTag("toolbar-title"), fontSize = if (startAlignedTitle) 14.sp else 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                else Box(Modifier.align(Alignment.CenterStart).padding(start = 52.dp, end = 148.dp).testTag("toolbar-forum-pill")) { titleContent() }
+                if (showBack) Box(Modifier.align(Alignment.CenterStart).padding(start = 4.dp).size(48.dp).testTag("toolbar-back-glass"), contentAlignment = Alignment.Center) {
+                    AnyuFrostedSurface(layer, origin, Modifier.size(36.dp).testTag("toolbar-back-background"), CircleShape, tintOverride = toolbarButtonTint) {}
+                    IconButton(onClick = onBack, modifier = Modifier.fillMaxSize()) { Icon(TiebaIcons.Back, "返回", modifier = Modifier.size(18.dp)) }
+                }
+                Row(Modifier.align(Alignment.CenterEnd).padding(end = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (showSearch) Box(Modifier.size(48.dp).testTag("toolbar-search-glass"), contentAlignment = Alignment.Center) {
+                        AnyuFrostedSurface(layer, origin, Modifier.size(36.dp).testTag("toolbar-search-background"), CircleShape, tintOverride = toolbarButtonTint) {}
+                        IconButton(onClick = onSearch, modifier = Modifier.fillMaxSize()) { Icon(Icons.Default.Search, "搜索", modifier = Modifier.size(18.dp)) }
+                    }
+                    if (hasActions) Box(Modifier.testTag("toolbar-actions-glass")) {
+                        AnyuFrostedSurface(layer, origin, Modifier.matchParentSize().padding(horizontal = 4.dp, vertical = 6.dp).testTag("toolbar-actions-background"), CircleShape, tintOverride = toolbarButtonTint) {}
+                        Row(verticalAlignment = Alignment.CenterVertically, content = actions)
+                    }
                 }
             }
         }
-        Column(Modifier.align(Alignment.TopCenter).padding(top = status + IOSLayout.navigationHeight).fillMaxWidth()) { feedback() }
+        Column(Modifier.align(Alignment.TopCenter).padding(top = status + navigationHeight).fillMaxWidth()) { feedback() }
         if (showTabs) AnyuFrostedSurface(layer, origin, Modifier.align(Alignment.BottomCenter).padding(start = 20.dp, end = 20.dp, bottom = bottom + 8.dp).widthIn(max = IOSLayout.barWidth).fillMaxWidth()) {
             Row(Modifier.fillMaxWidth().padding(4.dp).heightIn(min = IOSLayout.barHeight - 8.dp)) {
                 listOf(Triple("home", "首页", Icons.Default.Home), Triple("forums", "进吧", Icons.Default.List), Triple("me", "我的", Icons.Default.AccountCircle)).forEach { (kind, label, icon) ->
@@ -129,11 +153,12 @@ object IOSLayout {
         }
         Box(Modifier.align(Alignment.BottomCenter).padding(bottom = if (showTabs) bottom + 84.dp else bottom + 12.dp)) { snackbar() }
     }
+    }
 }
 
 @Composable fun <T> IOSSegmentedControl(options: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit, modifier: Modifier = Modifier) {
-    Row(modifier.clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)).padding(2.dp)) {
-        options.forEach { (value, label) -> Box(Modifier.weight(1f).clip(RoundedCornerShape(7.dp)).background(if (selected == value) MaterialTheme.colorScheme.surface else Color.Transparent).selectable(selected == value, role = Role.Tab, onClick = { onSelect(value) }).heightIn(min = 32.dp).padding(horizontal = 8.dp, vertical = 5.dp), contentAlignment = Alignment.Center) {
+    Row(modifier.clip(RoundedCornerShape(IOSLayout.innerRadius)).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)).padding(2.dp)) {
+        options.forEach { (value, label) -> Box(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(if (selected == value) MaterialTheme.colorScheme.surface else Color.Transparent).selectable(selected == value, role = Role.Tab, onClick = { onSelect(value) }).heightIn(min = 32.dp).padding(horizontal = 8.dp, vertical = 5.dp), contentAlignment = Alignment.Center) {
             Text(label, fontSize = 13.sp, fontWeight = if (selected == value) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1)
         } }
     }

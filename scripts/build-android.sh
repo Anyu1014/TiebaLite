@@ -16,9 +16,9 @@ else
   exit 2
 fi
 VERSION="$(/Users/y/toolchains/bin/node -p 'require("../app-config.json").version')"
-mkdir -p "$ROOT/releases/android"
 NAME="TiebaLite-$VERSION.apk"
 if [[ "$MODE" == debug ]]; then NAME="TiebaLite-$VERSION-debug.apk"; fi
-cp "app/build/outputs/apk/$MODE/app-$MODE.apk" "$ROOT/releases/android/$NAME"
-/Users/y/toolchains/bin/apksigner verify --verbose "$ROOT/releases/android/$NAME"
-/usr/bin/shasum -a 256 "$ROOT/releases/android/$NAME"
+SOURCE_APK="app/build/outputs/apk/$MODE/app-$MODE.apk"
+/Users/y/toolchains/bin/apksigner verify --verbose "$SOURCE_APK"
+OUTPUT="$(/Users/y/toolchains/bin/node "$ROOT/scripts/store-package.mjs" "$SOURCE_APK" "$NAME")"
+/usr/bin/shasum -a 256 "$OUTPUT"

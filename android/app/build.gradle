@@ -44,6 +44,7 @@ android {
         main {
             proto.srcDir '../../ios/Protos'
             assets.srcDir 'src/main/assets'
+            assets.srcDir '../../shared-assets'
         }
     }
     packaging { resources.excludes += ['META-INF/INDEX.LIST', 'META-INF/DEPENDENCIES'] }

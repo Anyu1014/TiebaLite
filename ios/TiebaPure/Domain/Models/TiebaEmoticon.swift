@@ -2,6 +2,14 @@ import Foundation
 import UIKit
 
 enum TiebaEmoticon {
+    private static let bundledImages: [String: UIImage] = {
+        var images: [String: UIImage] = [:]
+        for name in namesByImageName.keys {
+            if let url = Bundle.main.url(forResource: name, withExtension: "png", subdirectory: "tieba-emoticons"),
+               let image = UIImage(contentsOfFile: url.path) { images[name] = image }
+        }
+        return images
+    }()
     private static let namesByImageName: [String: String] = [
         "image_emoticon1": "呵呵",
         "image_emoticon2": "哈哈",
@@ -126,6 +134,7 @@ enum TiebaEmoticon {
 
     static func cachedImage(for code: String) -> UIImage? {
         guard let imageName = imageName(for: code) else { return nil }
+        if let image = bundledImages[imageName] { return image }
         if let image = TiebaEmoticonCache.shared.memoryImage(for: imageName) {
             return image
         }
@@ -139,6 +148,31 @@ enum TiebaEmoticon {
 
     static func remoteImageURL(imageName: String) -> URL? {
         TiebaEmoticonURLPolicy.imageURL(for: imageName)
+    }
+
+    static func imageName(fromURL raw: String) -> String? {
+        guard let url = URL(string: raw.replacingOccurrences(of: "http://", with: "https://")),
+              url.host?.lowercased() == TiebaEmoticonURLPolicy.host,
+              url.scheme == "https", url.port == nil || url.port == 443,
+              url.user == nil, url.password == nil else { return nil }
+        let name = url.deletingPathExtension().lastPathComponent
+        guard TiebaEmoticonURLPolicy.isValidImageName(name),
+              url.path == "/tb/editor/images/client/\(name).png" else { return nil }
+        return name
+    }
+
+    static func normalizedBlocks(_ blocks: [ContentBlock]) -> [ContentBlock] {
+        blocks.flatMap { block -> [ContentBlock] in
+            switch block {
+            case let .text(text): return self.blocks(from: text)
+            case let .image(image):
+                if let name = [image.originalURL, image.thumbnailURL].compactMap({ $0 }).compactMap({ imageName(fromURL: $0.absoluteString) }).first {
+                    return [.emoticon(code: name)]
+                }
+                return [block]
+            default: return [block]
+            }
+        }
     }
 
     static func displayText(for code: String) -> String {
