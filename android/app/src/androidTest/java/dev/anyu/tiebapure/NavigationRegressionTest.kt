@@ -118,6 +118,7 @@ class NavigationRegressionTest {
             var metrics = "${route.kind}: waiting for toolbar"
             // Insets and accessibility publish separate frames during navigation.
             try { eventually {
+                if (android.os.Build.VERSION.SDK_INT >= 33) inst.uiAutomation.clearCache()
                 val frame = nodes(inst.uiAutomation.rootInActiveWindow)
                 fun height(node: AccessibilityNodeInfo) = Rect().also(node::getBoundsInScreen).height() / density
                 val bar = frame.firstOrNull { it.viewIdResourceName == "top-frosted-bar" }
